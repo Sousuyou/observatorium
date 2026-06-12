@@ -96,6 +96,13 @@
     KOTO（絃 ─ カープラス・ストロングの物理弦）/ GLASS（玻璃 ─ 遅い満ち）。
     CHORD段先頭の「♪」またはVキーで巡回。旋律・コード・合の二重奏・
     自動のフレーズ、観測者の楽器すべてが持ち替わる
+
+    v2.6「手当て」：
+    ・KOTOの修正 ─ 遅延帰還の弦はWebAudioの2.9ms下限により高音が破綻する
+      （約345Hz超が同一音程に張り付く）。全音域で正しい撥弦モデルへ書換
+    ・スマホ ─ 標本をスクロール棚から「一望できるチップの庭」へ（学名/Hzは
+      調書に任せて非表示）。印は6つ・32pxに、副題は狭い画面では省く
+    ・雨の印 ─ 右上のツール列に「雨」を追加（SP.00の札と同期）
   */
   :root{
     --ink:#e8edf8; --dim:#7d87a6; --hair:rgba(205,216,240,.14);
@@ -268,11 +275,11 @@
   @keyframes lampPulse{ 0%,100%{opacity:1} 50%{opacity:.45} }
 
   @media (max-width:760px){
-    .brand{ max-width:56vw; } /* 印が5つに増えても、銘と副題が衝突しない幅 */
     .brand h1{ font-size:13px; letter-spacing:.18em; }
-    .brand .lat{ font-size:6.5px; letter-spacing:.18em; white-space:normal; line-height:1.9; }
-    .tools{ gap:6px; }
-    .tools button{ width:36px; height:36px; font-size:12px; }
+    .brand .lat{ display:none; } /* 狭い画面では銘のみ（印が6つでも衝突しない） */
+    .brand .rule{ width:78px; }
+    .tools{ gap:5px; }
+    .tools button{ width:32px; height:32px; font-size:11px; }
     .motto{ display:none; }
     .hud-bl{ bottom:calc(var(--benchH,140px) + 34px); font-size:8.5px; }
     .hud-br{ display:none; } /* 狭い画面では計器を方位のみに */
@@ -293,17 +300,15 @@
     .formulary::-webkit-scrollbar{ display:none; }
     .formulary .fl{ font-size:8px; min-width:70px; }
     .formula{ font-size:9px; padding:7px 12px; }
-    .specimens{ /* 16標本は横にすべる一列の棚に */
-      flex-wrap:nowrap; overflow-x:auto; justify-content:flex-start;
-      width:100%; padding:0 12px 4px;
-      -webkit-overflow-scrolling:touch; scrollbar-width:none;
+    .specimens{ /* 全標本を一望できる小さなチップの庭に（スクロールしない） */
+      flex-wrap:wrap; justify-content:center;
+      width:100%; padding:0 8px; gap:4px;
     }
-    .specimens::-webkit-scrollbar{ display:none; }
-    .spec{ min-width:142px; padding:8px 9px 7px 12px; gap:3px; }
-    .spec .no{ font-size:8px; }
-    .spec .latin{ font-size:7.5px; }
-    .spec .jp{ font-size:12.5px; }
-    .spec .hz{ font-size:7.5px; }
+    .spec{ min-width:0; padding:5px 9px 4px 10px; gap:1px; }
+    .spec .latin,.spec .hz{ display:none; } /* 学名とHzは調書に任せる */
+    .spec .no{ font-size:6px; letter-spacing:.12em; }
+    .spec .jp{ font-size:10.5px; letter-spacing:.04em; }
+    .spec .lamp{ width:4px; height:4px; right:4px; top:4px; }
   }
 </style>
 </head>
@@ -320,6 +325,7 @@
   <aside class="motto">宇宙と植物の、交わる場所。</aside>
 
   <nav class="tools">
+    <button id="rainT" title="雨を降らせる / 止ませる（SP.00と同じ）">雨</button>
     <button id="root" title="基準星を選ぶ ─ 観測室ごと移調する">律</button>
     <button id="auto" title="自動観測 ─ 層がひとりでに移ろう">演</button>
     <button id="mute" title="音を響かせる / 黙らせる">響</button>
@@ -1321,6 +1327,9 @@ const VOICE_P={
   orgel:   { atk:.003, dk:1.6, thump:false,
     T:f=>clamp(3-f/300,1.0,2.4),
     parts:[[1,1,0],[3,.2,0],[5,.07,0],[5.43,.045,0]] }, // 5.43次だけが櫛歯の影
+  koto:    { atk:.003, dk:2.05, thump:"pluck", // 撥弦：高次ほど鋭く減衰する倍音束＋爪の一瞬
+    T:f=>clamp(3.2-f/350,1.1,2.6),             // （遅延帰還の弦は2.9msの壁で高音が破綻するため不採用）
+    parts:[[1,.7,-1.5],[1,.6,1.5],[2,.5,0],[3,.28,0],[4,.15,0],[5,.08,0],[6,.04,0],[7,.02,0]] },
   glass:   { atk:.35, dk:1.05, thump:false,
     T:f=>clamp(8-f/140,3.5,7.5),
     parts:[[1,.8,-2],[1,.7,2],[2,.16,0],[3,.04,0]] },
@@ -1338,27 +1347,6 @@ function pianoNote(freq,vel,delay,tmul){
   out.connect(audio.master);
   if(audio.echo){ const es=ac.createGain(); es.gain.value=.5; out.connect(es).connect(audio.echo); }
   if(audio.farBus){ const fs=ac.createGain(); fs.gain.value=.18; out.connect(fs).connect(audio.farBus); }
-  if(vid==="koto"){ // 絃：周期1/fの遅延帰還＝カープラス・ストロングの弦そのもの
-    const T=clamp(3.4-freq/200,1.2,3)*(tmul||1);
-    audio._ksBuf=audio._ksBuf||makeNoise(ac,.05);
-    const burst=ac.createBufferSource(); burst.buffer=audio._ksBuf;
-    const bg=ac.createGain();
-    bg.gain.setValueAtTime(vel*.55,t0);
-    bg.gain.exponentialRampToValueAtTime(.0001,t0+.012); // 爪の一瞬
-    const dl=ac.createDelay(.1); dl.delayTime.value=1/freq;
-    const damp=ac.createBiquadFilter(); damp.type="lowpass";
-    damp.frequency.value=Math.min(6500,freq*9);
-    const fb=ac.createGain();
-    fb.gain.value=Math.exp(Math.log(.001)/(freq*T)); // T秒で千分の一へ
-    burst.connect(bg).connect(dl);
-    dl.connect(damp); damp.connect(fb); fb.connect(dl);
-    g.gain.setValueAtTime(vel*.09,t0);
-    damp.connect(g);
-    burst.start(t0);
-    setTimeout(()=>{ try{ dl.disconnect(); fb.disconnect(); damp.disconnect(); g.disconnect(); }catch(e){} },
-      ((delay||0)+T)*1000+800); // 帰還ループは自分で締める（GCが効かないため）
-    return;
-  }
   const P=VOICE_P[vid]||VOICE_P.felt;
   const T=P.T(freq)*(tmul||1);
   g.gain.setValueAtTime(0,t0);
@@ -1372,15 +1360,18 @@ function pianoNote(freq,vel,delay,tmul){
     pg.gain.exponentialRampToValueAtTime(.001, t0+T/Math.pow(n,P.dk));
     o.connect(pg).connect(g); o.start(t0); o.stop(t0+T+.6);
   }
-  if(P.thump){ // フェルトの打鍵：ごく短い柔らかな胴鳴り
+  if(P.thump){ // 打鍵のトランジェント：フェルトの胴鳴り、または爪の一瞬
     const nb=ac.createBuffer(1,(ac.sampleRate*.06)|0,ac.sampleRate);
     const d=nb.getChannelData(0);
     for(let i=0;i<d.length;i++) d[i]=(Math.random()*2-1)*(1-i/d.length);
     const src=ac.createBufferSource(); src.buffer=nb;
-    const lp=ac.createBiquadFilter(); lp.type="lowpass"; lp.frequency.value=240;
-    const ng=ac.createGain(); ng.gain.setValueAtTime(vel*.02,t0);
-    ng.gain.exponentialRampToValueAtTime(.0001,t0+.09);
-    src.connect(lp).connect(ng).connect(g); src.start(t0);
+    const fl=ac.createBiquadFilter();
+    if(P.thump==="pluck"){ fl.type="bandpass"; fl.frequency.value=Math.min(5200,freq*7); fl.Q.value=1.2; }
+    else { fl.type="lowpass"; fl.frequency.value=240; }
+    const ng=ac.createGain();
+    ng.gain.setValueAtTime(vel*(P.thump==="pluck"?.028:.02),t0);
+    ng.gain.exponentialRampToValueAtTime(.0001,t0+(P.thump==="pluck"?.035:.09));
+    src.connect(fl).connect(ng).connect(g); src.start(t0);
   }
 }
 /* 彗星の航跡音：視野を横切る6.5秒、ノイズが高みから低みへ滑降しながら
@@ -1493,6 +1484,8 @@ function toggleRain(on,opts){
   rain.on=on;
   const el=document.getElementById("sp00");
   if(el) el.classList.toggle("on",on);
+  const tb=document.getElementById("rainT"); // 右上の印とも同期
+  if(tb) tb.classList.toggle("on",on);
   if(on) rainAudioOn(); else rainAudioOff();
   if(!opts.quiet) addLog(on?"WEATHER ─ RAIN BEGINS · PETRICHOR":"WEATHER ─ RAIN ENDS");
   syncHash(); updateHud(); updateDossier(); updateCindex();
@@ -1845,6 +1838,10 @@ document.getElementById("root").addEventListener("click",function(){
   bell(ROOT*2,.045);
   addLog(`ROOT ─ ${R.star} ${R.note} ${ROOT.toFixed(1)}Hz`);
   this.title=`基準星を選ぶ ─ いま ${R.star}（${R.note} ${ROOT.toFixed(1)}Hz）`;
+});
+document.getElementById("rainT").addEventListener("click",()=>{
+  toggleRain(!rain.on);
+  hintEl.classList.add("off");
 });
 document.getElementById("dawn").addEventListener("click",()=>{
   chordPend.forEach(clearTimeout); chordPend=[]; // 押しかけの和音も還す
