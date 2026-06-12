@@ -67,6 +67,13 @@
     新しい純正比 6/5（短三度）・8/5（短六度）が和声に翳りを加える。
     ヤロウはカモミールとCHAMAZULENEを、生姜はパラダイス種と6-GINGEROLを
     共有する──香気の星座に、新しい糸が張られる
+
+    v2.1「香りのカデンツ」── 和声進行を配合替えとして演奏する：
+    全標本が同じ根音上の純正比に立つ＝配合はそのまま和音。
+    CADENCE段のボタンで 11秒ごとにコードチェンジ（ループ・再押下で停止）。
+    I·IV·V·I（帰還）/ I·V·vi·IV（カノン）/ IV·V·iii·vi（王道）/ i·iv·V·i（夜想）。
+    転和の瞬間にピアノが新しい和音を爪弾き、「律」で進行ごと移調する。
+    札に触れる・処方を押す・演・還でカデンツは静かに手を引く
   */
   :root{
     --ink:#e8edf8; --dim:#7d87a6; --hair:rgba(205,216,240,.14);
@@ -183,6 +190,7 @@
     text-transform:uppercase; white-space:nowrap;
     backdrop-filter:blur(6px); -webkit-backdrop-filter:blur(6px);
   }
+  .formula.cad{ text-transform:none; } /* ローマ数字の大小文字＝長調/短調の区別を保つ */
   .formula:hover{ border-color:rgba(233,212,163,.5); color:#e9dfc2; }
   .formula.on{ border-color:rgba(233,212,163,.75); color:var(--gold); background:rgba(233,212,163,.08); }
 
@@ -304,6 +312,7 @@
 
   <p class="hint" id="hint">標 本 札 に 触 れ る と 、 香 り の 軌 道 と 音 が 灯 り ま す</p>
   <div class="bench">
+    <nav class="formulary" id="cadences"><span class="fl">CADENCE ──</span></nav>
     <nav class="formulary" id="archive"><span class="fl">ARCHIVE ──</span></nav>
     <nav class="formulary" id="formulary"><span class="fl">FORMULARY ──</span></nav>
     <nav class="specimens" id="specimens"></nav>
@@ -1472,6 +1481,7 @@ BOTS.forEach(b=>{
                `<span class="hz">${b.rt} ─ ${b.freq.toFixed(1)} Hz</span>`+
                `<i class="lamp"></i>`;
   el.addEventListener("click",()=>{
+    stopCadence(); // 手を触れたら、進行は手を引く
     const on=!state.active[b.id];
     toggleBot(b,on);
     if(on){ bell(b.freq*2,.04,b);
@@ -1530,7 +1540,98 @@ const flWrap=document.getElementById("formulary");
 const arWrap=document.getElementById("archive");
 FORMULAS.forEach(F=>makeSetBtn(F,flWrap));
 ARCHIVES.forEach(F=>makeSetBtn(F,arWrap));
+
+/* ============================ 5.5 香りのカデンツ ============================ */
+/* 全標本が同じ根音上の純正比に立つ──だから配合は、そのまま和音である。
+   進行ボタンを押すと、11秒ごとに配合がコードチェンジしてゆく。
+   各和音は実在のボタニカルの声部で組まれ、転和の瞬間にピアノが一度爪弾く。
+   「律」で基準星を変えれば、進行ごと移調する */
+const CADENCES=[
+  { id:"cad_classic", name:"I·IV·V·I", jp:"帰還 ─ 主和音へ還る古典のカデンツ",
+    steps:[
+      { deg:"I MAJOR",   bots:["juniper","orris","nutmeg","angelica"] },
+      { deg:"IV MAJOR",  bots:["cassia","cardamom","juniper"] },
+      { deg:"V MAJOR",   bots:["cubeb","yuzu","coriander"] },
+      { deg:"I MAJOR",   bots:["juniper","lavender","cubeb","angelica"] },
+    ]},
+  { id:"cad_canon", name:"I·V·vi·IV", jp:"カノン ─ 永遠に巡る環",
+    steps:[
+      { deg:"I MAJOR",   bots:["juniper","lavender","orange"] },
+      { deg:"V MAJOR",   bots:["nutmeg","yuzu","sansho"] },
+      { deg:"vi MINOR",  bots:["cardamom","juniper","shiso"] },
+      { deg:"IV MAJOR",  bots:["chamomile","ginger","cucumber"] },
+    ]},
+  { id:"cad_royal", name:"IV·V·iii·vi", jp:"王道 ─ 切なさの定石",
+    steps:[
+      { deg:"IV MAJOR",  bots:["almond","cardamom","juniper"] },
+      { deg:"V MAJOR",   bots:["nutmeg","coriander","yuzu"] },
+      { deg:"iii MINOR", bots:["orris","cubeb","yuzu"] },
+      { deg:"vi MINOR",  bots:["ginger","juniper","lavender"] },
+    ]},
+  { id:"cad_noct", name:"i·iv·V·i", jp:"夜想 ─ 短調の夜、薔薇と檜が翳る",
+    steps:[
+      { deg:"i MINOR",   bots:["juniper","rose","cubeb"] },
+      { deg:"iv MINOR",  bots:["yarrow","hinoki","cucumber"] },
+      { deg:"V MAJOR",   bots:["nutmeg","yuzu","gyokuro"] },
+      { deg:"i MINOR",   bots:["juniper","caraway","angelica","rose"] },
+    ]},
+];
+const cadence={cur:null, step:0, t:null, pend:[]};
+function applyChord(C,step){
+  cadence.pend.forEach(clearTimeout); cadence.pend=[]; // 前の転和の点灯予約を破棄
+  const chord=C.steps[step];
+  for(const b of BOTS)
+    if(state.active[b.id] && !chord.bots.includes(b.id)) toggleBot(b,false,{quiet:true});
+  let i=0;
+  for(const id of chord.bots){
+    if(state.active[id]) continue;
+    const b=BOT[id];
+    cadence.pend.push(setTimeout(()=>{ toggleBot(b,true,{quiet:true}); bell(b.freq*2,.03,b); }, i*240));
+    i++;
+  }
+  addLog(`CADENCE ─ ${C.name} ─ ${chord.deg}`);
+  setTimeout(()=>{ // 転和の声：ピアノが新しい和音を一度だけ爪弾く
+    if(cadence.cur!==C) return;
+    const pcs=chord.bots.map(id=>fitPc(BOT[id].freq)).sort((a,b)=>a-b);
+    let d=0;
+    pianoNote(pcs[0]/2,.45,0);
+    for(const f of pcs){ d+=.4; pianoNote(f,.3,d); }
+  },900);
+}
+function startCadence(C){
+  if(cadence.cur===C){ stopCadence(); return; }
+  stopCadence(true);
+  if(auto.on){ auto.on=false; clearTimeout(auto.t);
+    document.getElementById("auto").classList.remove("on"); }
+  unlockAudio(); hintEl.classList.add("off");
+  cadence.cur=C; cadence.step=0;
+  document.querySelectorAll(".formula.cad").forEach(e=>
+    e.classList.toggle("on", e.dataset.id===C.id));
+  applyChord(C,0);
+  cadence.t=setInterval(()=>{
+    cadence.step=(cadence.step+1)%C.steps.length;
+    applyChord(C,cadence.step);
+  },11000);
+}
+function stopCadence(quiet){
+  if(!cadence.cur) return;
+  clearInterval(cadence.t); cadence.t=null;
+  cadence.pend.forEach(clearTimeout); cadence.pend=[];
+  document.querySelectorAll(".formula.cad").forEach(e=>e.classList.remove("on"));
+  if(!quiet) addLog("CADENCE ─ RELEASED");
+  cadence.cur=null;
+}
+const cadWrap=document.getElementById("cadences");
+CADENCES.forEach(C=>{
+  const el=document.createElement("button");
+  el.className="formula cad"; el.dataset.id=C.id;
+  el.title=`${C.jp}（11秒ごとに転和・もう一度押すと止まる）`;
+  el.textContent=C.name;
+  el.addEventListener("click",()=>startCadence(C));
+  cadWrap.appendChild(el);
+});
 function applyFormula(F){
+  stopCadence(true);
   unlockAudio();
   hintEl.classList.add("off");
   // 処方にない層は静かに退き、処方の層がひとつずつ灯ってゆく
@@ -1554,6 +1655,7 @@ function updateFormulary(){
   const act=BOTS.filter(b=>state.active[b.id]).map(b=>b.id).sort().join(",");
   document.querySelectorAll(".formula").forEach(el=>{
     const F=FORMULAS.concat(ARCHIVES).find(f=>f.id===el.dataset.id);
+    if(!F) return; // カデンツの譜は「配合一致で金に灯る」対象外（進行中の灯はstartCadenceが管理）
     el.classList.toggle("on", act!=="" && act===F.bots.slice().sort().join(","));
   });
 }
@@ -1595,6 +1697,7 @@ function autoStep(){
   if(b) toggleBot(b,on,{auto:true});
 }
 document.getElementById("auto").addEventListener("click",function(){
+  if(!auto.on) stopCadence(true); // 自動観測とカデンツは同席しない
   auto.on=!auto.on;
   this.classList.toggle("on",auto.on);
   unlockAudio();
@@ -1648,6 +1751,7 @@ document.getElementById("root").addEventListener("click",function(){
   this.title=`基準星を選ぶ ─ いま ${R.star}（${R.note} ${ROOT.toFixed(1)}Hz）`;
 });
 document.getElementById("dawn").addEventListener("click",()=>{
+  stopCadence(true);
   for(const b of BOTS) if(state.active[b.id]) toggleBot(b,false,{quiet:true});
   if(rain.on) toggleRain(false,{quiet:true}); // 夜明けには雨も上がる
   addLog("ALL LAYERS RELEASED");
