@@ -35,6 +35,14 @@
     ・深宇宙の残響 ─ 軌道半径が遠い標本ほど長い残響の彼方で鳴る
     ・律（基準星）─ 根音を五つの一等星から選ぶ。点灯中の層はグリッサンド
     ・ARCHIVE ─ 実在銘酒の公知ボタニカル構成（標本箱の外は「欠測」）
+
+    v1.7「和声の天秤」：
+    ・擦れの実測 ─ Plomp–Levelt曲線で点灯ペアの粗さを計算し、
+      擦れの強い層の上部部分音だけを沈める（基音の色は残す＝攻めは保つ）
+    ・潮汐 ─ 各層50〜90秒のうねりで交代に前へ。和音が呼吸する
+    ・観測者のピアノ ─ フェルトの鍵盤が配合の音高だけを爪弾く。
+      均整なら広い分散和音、攻めた配合は最も擦れる二音を声に出す
+    ・HUDに HARMONY（緊張度計）：SERENE/BALANCED/DARING/AUGMENTED
   */
   :root{
     --ink:#e8edf8; --dim:#7d87a6; --hair:rgba(205,216,240,.14);
@@ -821,6 +829,10 @@ function drawObservatory(t){
         conjs.push({a:Pa.bot,b:Pb.bot,born:t});
         bell(Pa.bot.freq*2,.022,Pa.bot);
         setTimeout(()=>bell(Pb.bot.freq*2,.022,Pb.bot),90);
+        if(Math.random()<.5){ // ときおり、合をピアノが小さく二重奏でなぞる
+          pianoNote(fitPc(Pa.bot.freq),.4,.06);
+          pianoNote(fitPc(Pb.bot.freq),.36,.34);
+        }
         addLog(`CONJUNCTION SP.${Pa.bot.no} × SP.${Pb.bot.no}`);
       }
     }
@@ -878,7 +890,7 @@ function initAudio(){
   const AC=window.AudioContext||window.webkitAudioContext;
   const ac=audio.ctx=new AC();
   audio.master=ac.createGain(); audio.master.gain.value=0;
-  const tone=ac.createBiquadFilter(); tone.type="lowpass"; tone.frequency.value=1750; tone.Q.value=.35;
+  const tone=audio.tone=ac.createBiquadFilter(); tone.type="lowpass"; tone.frequency.value=1750; tone.Q.value=.35;
   const tl=ac.createOscillator(), tg=ac.createGain();
   tl.frequency.value=1/49; tg.gain.value=620;
   tl.connect(tg).connect(tone.frequency); tl.start();
@@ -913,6 +925,7 @@ function unlockAudio(){
     audio.master.gain.setTargetAtTime(.55,audio.ctx.currentTime,1.0);
     audio.farGate.gain.setTargetAtTime(.55,audio.ctx.currentTime,1.0);
   }
+  if(!piano.t) piano.t=setTimeout(pianoPhrase, 8000+Math.random()*6000);
 }
 function bell(freq,gain,bot){
   if(!audio.ctx||audio.ctx.state!=="running") return;
@@ -936,7 +949,7 @@ function bell(freq,gain,bot){
   }
   // 鈴も整数次倍音（1·2·3·5次＝純正比）を主体に。
   // ごく薄い2.76次だけが鐘の影として残る（響きを金属にする最少量）
-  for(const [m,w] of [[1,1],[2,.36],[3,.18],[5,.06],[2.76,.05]]){
+  for(const [m,w] of [[1,1],[2,.36],[3,.18],[5,.06],[2.76,.04]]){
     const o=ac.createOscillator(); o.type="sine";
     o.frequency.value=freq*m; o.detune.value=(Math.random()-.5)*4;
     const pg=ac.createGain(); pg.gain.value=w;
@@ -951,10 +964,14 @@ function layerOn(bot){
     const L=audio.layers[bot.id];
     clearTimeout(L.stopT); L.stopT=null;
     L.g.gain.setTargetAtTime(L.level, ac.currentTime, 2.2);
+    if(L.tideG) L.tideG.gain.setTargetAtTime(L.level*.22, ac.currentTime, 2.2);
     scheduleBells(bot);
     return;
   }
   const snd=bot.snd, now=ac.currentTime;
+  // 距離感：遠い軌道ほど直接音をわずかに引く（残響送りは下で行う）
+  const depth=farDepth(bot);
+  const lv=snd.pad*(1-.22*depth);
   const g=ac.createGain(); g.gain.value=0;
   const oscs=[];
   /* 倍音列パッド：音色そのものを自然倍音（整数次 1f〜5f、約1/n減衰）で組む。
@@ -1004,18 +1021,23 @@ function layerOn(bot){
   const lfo=ac.createOscillator(), lg=ac.createGain();
   lfo.frequency.value=tr[0]; lg.gain.value=tr[1];
   lfo.connect(lg).connect(g.gain); lfo.start(); oscs.push(lfo);
+  // 潮汐：50〜90秒の大きなうねり。層が交代で前に出るので、
+  // 全層が常時フル発音で擦れ続けることがなくなる（和音が呼吸する）
+  const tide=ac.createOscillator(), tideG=ac.createGain();
+  tide.frequency.value=1/(50+Math.random()*40);
+  tide.detune.value=0;
+  tideG.gain.value=lv*.22;
+  tide.connect(tideG).connect(g.gain); tide.start(); oscs.push(tide);
   const pan=ac.createStereoPanner?ac.createStereoPanner():null;
   if(pan){ pan.pan.value=(Math.random()*2-1)*.7; g.connect(pan).connect(audio.master); }
   else g.connect(audio.master);
-  // 距離感：遠い軌道ほど直接音をわずかに引き、深宇宙の残響へ多く送る
-  const depth=farDepth(bot);
+  // 深宇宙の残響へ：遠い軌道ほど多く送る
   if(audio.farBus){
     const fs=ac.createGain(); fs.gain.value=depth*.85;
     (pan||g).connect(fs); fs.connect(audio.farBus);
   }
-  const lv=snd.pad*(1-.22*depth);
   g.gain.setTargetAtTime(lv, now, 2.4); // じんわり満ちる
-  audio.layers[bot.id]={g,oscs,bp:bpRef,level:lv,bellT:null,stopT:null};
+  audio.layers[bot.id]={g,oscs,bp:bpRef,h:hGains,tideG,level:lv,bellT:null,stopT:null};
   scheduleBells(bot);
 }
 function layerOff(bot){
@@ -1023,6 +1045,7 @@ function layerOff(bot){
   if(!L||!audio.ctx) return;
   clearTimeout(L.bellT); L.bellT=null;
   L.g.gain.setTargetAtTime(0, audio.ctx.currentTime, 1.1);
+  if(L.tideG) L.tideG.gain.setTargetAtTime(0, audio.ctx.currentTime, .6); // 潮汐も鎮める
   L.stopT=setTimeout(()=>{ // 静まったら振動体ごと止めてCPUを返す
     try{ L.oscs.forEach(o=>o.stop()); }catch(e){}
     delete audio.layers[bot.id];
@@ -1044,6 +1067,143 @@ function scheduleBells(bot){
     flashes.push({bot, phase:Math.random()*Math.PI*2, born:lastT||performance.now()});
     addLog(`SP.${bot.no} CHIME ${fq.toFixed(1)}Hz`);
   }, mn+Math.random()*(mx-mn));
+}
+
+/* ============================ 4.5 和声の天秤と観測者のピアノ ============================ */
+/* 音律は攻めたまま、擦れだけを科学で手なずける。
+   二音の「粗さ」を Plomp–Levelt の協和曲線（部分音同士が臨界帯域内で
+   うなる量）で実測し、擦れの強い層ほど上の部分音を布で包む。
+   基音の色（標本の声）はそのまま残る */
+function pairRoughness(fa,fb){
+  let r=0;
+  const W=[1,.5,.33,.25,.2]; // 部分音の重み（約1/n）
+  for(let i=1;i<=5;i++)for(let j=1;j<=5;j++){
+    const f1=fa*i, f2=fb*j;
+    const fmin=Math.min(f1,f2), df=Math.abs(f1-f2);
+    const s=.24/(.021*fmin+19);
+    r+=W[i-1]*W[j-1]*(Math.exp(-3.5*s*df)-Math.exp(-5.75*s*df));
+  }
+  return r;
+}
+/* 音程クラスの緊張：オクターブ畳み込みした音程が、半音・三全音・全音の
+   どの「軋みの谷」に近いかを測る（音域に依らない、楽理側の緊張） */
+function intervalTension(fa,fb){
+  let r=fa/fb; if(r<1) r=1/r;
+  while(r>=2) r/=2;
+  const c=1200*Math.log2(r);
+  const f=Math.min(c,1200-c); // 半音と長七度は同じ軋みの類
+  return Math.exp(-Math.pow((f-100)/60,2))
+       + .8*Math.exp(-Math.pow((f-600)/85,2))
+       + .3*Math.exp(-Math.pow((f-200)/70,2));
+}
+let HARM={pct:0,label:"SERENE",rough:{}};
+function harmLabel(p){ return p<10?"SERENE":p<33?"BALANCED":p<55?"DARING":"AUGMENTED"; }
+function rebalanceHarmony(){
+  const act=BOTS.filter(b=>state.active[b.id]);
+  const rough={}; let rsum=0,isum=0,np=0;
+  for(let i=0;i<act.length;i++)for(let j=i+1;j<act.length;j++){
+    const r=pairRoughness(act[i].freq,act[j].freq);
+    rough[act[i].id]=(rough[act[i].id]||0)+r;
+    rough[act[j].id]=(rough[act[j].id]||0)+r;
+    rsum+=r; isum+=intervalTension(act[i].freq,act[j].freq); np++;
+  }
+  // 緊張度＝実うなり28%＋音程クラス72%（耳の事実と楽理の事実の折衷。
+  //  校正の目安：LONDON DRY 23 / BOMBAY 27 = BALANCED、半音ペア87 / 三全音62 = AUGMENTED）
+  const pct=np?Math.min(100,Math.round(
+    (.28*Math.min(1,(rsum/np)/.45) + .72*Math.min(1,isum/np))*100 )):0;
+  HARM={pct,label:harmLabel(pct),rough};
+  if(!audio.ctx) return;
+  const now=audio.ctx.currentTime;
+  // 擦れの強い層ほど、第2〜5部分音をそっと沈める（うなりは上音域に棲むため）
+  const HW={2:.4,3:.24,4:.13,5:.08};
+  for(const b of act){
+    const L=audio.layers[b.id]; if(!L||!L.h) continue;
+    const duck=clamp((rough[b.id]||0)*DUCK_SCALE,0,.55);
+    for(const n in L.h) L.h[n].gain.setTargetAtTime(HW[n]*(1-duck),now,1.6);
+  }
+  // 層が増え、緊張が高まるほど、観測室の天井がそっと低くなる
+  if(audio.tone)
+    audio.tone.frequency.setTargetAtTime(
+      Math.max(1280, 1750-60*Math.max(0,act.length-3)-3*pct), now, 2.5);
+}
+const DUCK_SCALE=1.5; // 試聴で校正した係数（擦れ→部分音の沈め量）
+
+/* 観測者のピアノ：フェルトを噛ませた小さな鍵盤が、観測室の隅に置いてある。
+   弾くのはいま灯っている配合の音高だけ（すべて5-リミット純正）。
+   均整のとれた配合なら、低い根から広やかな分散和音が立ちのぼり、
+   攻めた配合なら、最も擦れ合う二音をあえて声に出してから根に還す */
+const piano={t:null};
+function fitPc(f){ while(f<196) f*=2; while(f>620) f/=2; return f; }
+function pianoNote(freq,vel,delay){
+  if(!audio.ctx||audio.ctx.state!=="running"||!audio.on) return;
+  const ac=audio.ctx, t0=ac.currentTime+(delay||0);
+  const g=ac.createGain();
+  g.gain.setValueAtTime(0,t0);
+  g.gain.linearRampToValueAtTime(vel*.055,t0+.008);
+  const T=clamp(7.5-freq/160,2.4,6.5); // 低い音ほど長く歌う
+  g.gain.setTargetAtTime(0,t0+T*.55,T*.28);
+  let out=g;
+  if(ac.createStereoPanner){
+    const pan=ac.createStereoPanner();
+    pan.pan.value=(Math.random()*2-1)*.35; g.connect(pan); out=pan;
+  }
+  out.connect(audio.master);
+  if(audio.echo){ const es=ac.createGain(); es.gain.value=.5; out.connect(es).connect(audio.echo); }
+  if(audio.farBus){ const fs=ac.createGain(); fs.gain.value=.18; out.connect(fs).connect(audio.farBus); }
+  // 弦は整数次部分音だけで組む（音色も純正比のまま。高い部分音ほど早く減衰）
+  for(const [n,w,detc] of [[1,.58,-1.3],[1,.46,1.3],[2,.42,0],[3,.2,0],[4,.09,0],[5,.05,0],[6,.025,0]]){
+    const o=ac.createOscillator(); o.type="sine";
+    o.frequency.value=freq*n; o.detune.value=detc;
+    const pg=ac.createGain();
+    pg.gain.setValueAtTime(w,t0);
+    pg.gain.exponentialRampToValueAtTime(.001, t0+T/Math.pow(n,1.25));
+    o.connect(pg).connect(g); o.start(t0); o.stop(t0+T+.6);
+  }
+  { // フェルトの打鍵：ごく短い柔らかな胴鳴り
+    const nb=ac.createBuffer(1,(ac.sampleRate*.06)|0,ac.sampleRate);
+    const d=nb.getChannelData(0);
+    for(let i=0;i<d.length;i++) d[i]=(Math.random()*2-1)*(1-i/d.length);
+    const src=ac.createBufferSource(); src.buffer=nb;
+    const lp=ac.createBiquadFilter(); lp.type="lowpass"; lp.frequency.value=240;
+    const ng=ac.createGain(); ng.gain.setValueAtTime(vel*.02,t0);
+    ng.gain.exponentialRampToValueAtTime(.0001,t0+.09);
+    src.connect(lp).connect(ng).connect(g); src.start(t0);
+  }
+}
+function pianoPhrase(){
+  piano.t=setTimeout(pianoPhrase, 14000+Math.random()*16000);
+  const act=BOTS.filter(b=>state.active[b.id]);
+  if(act.length<2||!audio.on||!audio.ctx||audio.ctx.state!=="running") return;
+  if(Math.random()>.78) return; // 沈黙も演奏のうち
+  let pcs=[];
+  for(const b of act){
+    const f=fitPc(b.freq);
+    if(!pcs.some(x=>Math.abs(x/f-1)<.012)) pcs.push(f);
+  }
+  pcs.sort((a,b)=>a-b);
+  const seq=[]; let gap;
+  if(HARM.pct<55 || pcs.length<2){
+    // 均整：低い根から、広やかに
+    gap=.4+Math.random()*.22;
+    seq.push([pcs[0]/2,.5]);
+    for(const f of pcs.slice(0,5)) seq.push([f,.34+Math.random()*.2]);
+    if(pcs.length>=2&&Math.random()<.5)
+      seq.push([pcs[(Math.random()*Math.min(3,pcs.length))|0]*2,.26]);
+  } else {
+    // 攻め：最も擦れ合う二音を声に出し、根に還す
+    gap=.3+Math.random()*.12;
+    let bi=0,bj=1,br=-1;
+    for(let i=0;i<pcs.length;i++)for(let j=i+1;j<pcs.length;j++){
+      const r=pairRoughness(pcs[i],pcs[j]);
+      if(r>br){ br=r; bi=i; bj=j; }
+    }
+    seq.push([pcs[bi],.52]);
+    seq.push([pcs[bj],.5]);
+    if(Math.random()<.7) seq.push([pcs[0]/2,.44]);
+  }
+  let d=.0;
+  for(const [f,v] of seq){ pianoNote(f,v,d); d+=gap*(.85+Math.random()*.35); }
+  addLog(`PIANO ─ ${HARM.label} · ${seq.length} VOICES`);
 }
 
 /* ============================ 5. 標本札と印 ============================ */
@@ -1158,7 +1318,7 @@ function toggleBot(b,on,opts){
   else  { deactivateRing(b); layerOff(b); }
   if(!opts.quiet)
     addLog(`${opts.auto?"AUTO ─ ":""}SP.${b.no} ${b.latin.split(" ")[0].toUpperCase()} ─ LAYER ${on?"ON":"OFF"}`);
-  syncHash(); updateHud(); updateDossier(); updateCindex(); updateFormulary();
+  rebalanceHarmony(); syncHash(); updateHud(); updateDossier(); updateCindex(); updateFormulary();
 }
 /* レシピのURL共有：点灯状態がそのままURLに刻まれ、リンクを開けば同じ配合が再現される */
 function syncHash(){
@@ -1226,7 +1386,7 @@ function setRoot(i){
       if(L.bp) L.bp.frequency.setTargetAtTime(b.freq*6,now,.9);
     }
   }
-  updateHud(); updateDossier();
+  rebalanceHarmony(); updateHud(); updateDossier();
 }
 document.getElementById("root").addEventListener("click",function(){
   unlockAudio();
@@ -1273,6 +1433,7 @@ function updateHud(){
     `ESSENCES <b>${String(act.length).padStart(2,"0")}</b> / ${BOTS.length}\n`+
     `ROOT ${REFS[refIdx].note} <b>${ROOT.toFixed(1)} Hz</b> ─ ${REFS[refIdx].star} ─ 5-LIMIT JUST INTONATION\n`+
     `TIMBRE HARMONIC SERIES <b>1·2·3·4·5</b>\n`+
+    `HARMONY <b>${String(HARM.pct).padStart(2,"0")}%</b> ─ ${HARM.label}\n`+
     `LUNAR ${LUNAR.name} <b>${Math.round(LUNAR.k*100)}%</b>`+
     (LUNAR.full?" ─ BELLS BRIGHTENED":"");
   const shown=act.slice(0,10);
