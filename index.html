@@ -43,6 +43,12 @@
     ・観測者のピアノ ─ フェルトの鍵盤が配合の音高だけを爪弾く。
       均整なら広い分散和音、攻めた配合は最も擦れる二音を声に出す
     ・HUDに HARMONY（緊張度計）：SERENE/BALANCED/DARING/AUGMENTED
+
+    v1.8「白霧と針音」── 観測室に棲む四つのノイズ：
+    ・蒸留の白霧 ─ 核から立つ蒸気のベッド。層の数で濃淡、41秒のフィルタ揺らぎ
+    ・宇宙背景の囁き ─ 全消灯でも 2.725K の極小ヒスが「聴いている」気配を残す
+    ・彗星の航跡音 ─ 横断の6.5秒、1900→170Hzへ滑降し映像のパンと同期
+    ・記録の針音 ─ 観測記録が一行刻まれるたび、ペン先のクラックル
   */
   :root{
     --ink:#e8edf8; --dim:#7d87a6; --hair:rgba(205,216,240,.14);
@@ -594,6 +600,7 @@ function updateComet(t){
     const p1={x:-p0.x+(Math.random()-.5)*220, y:-p0.y+(Math.random()-.5)*220, z:-p0.z+(Math.random()-.5)*220};
     const c={x:(Math.random()-.5)*130, y:(Math.random()-.5)*130, z:(Math.random()-.5)*130};
     comet={p0,p1,c,born:t,dur:6500,trail:[]};
+    cometSound(p0,p1,6.5); // 航跡が見える間、音も滑降する
     addLog("TRANSIENT ─ COMET CROSSING");
   }
   if(comet){
@@ -875,6 +882,12 @@ function drawObservatory(t){
 /* 標本札ひとつ＝ひとつの層。全層が純正律の同じ根音の上に立つので、
    どの組み合わせで重ねても必ず調和し、重ねるほど壮大な和音になる */
 const audio={ctx:null,master:null,echo:null,on:true,layers:{},_susT:null};
+function makeNoise(ac,sec){
+  const buf=ac.createBuffer(1,(ac.sampleRate*sec)|0,ac.sampleRate);
+  const d=buf.getChannelData(0);
+  for(let i=0;i<d.length;i++) d[i]=Math.random()*2-1;
+  return buf;
+}
 function makeImpulse(ac,sec){
   const len=(ac.sampleRate*sec)|0, buf=ac.createBuffer(2,len,ac.sampleRate);
   for(let ch=0;ch<2;ch++){
@@ -915,6 +928,22 @@ function initAudio(){
   const farWet=ac.createGain(); farWet.gain.value=.6;
   audio.farBus.connect(audio.farGate).connect(convFar);
   convFar.connect(farWet).connect(comp);
+  /* 蒸留の白霧：核から立ちのぼる蒸気のノイズ・ベッド。
+     層が増えるほど濃くなり、誰もいない夜は宇宙背景の囁き（2.725K）だけが残る */
+  {
+    const src=ac.createBufferSource(); src.buffer=makeNoise(ac,4); src.loop=true;
+    const lp=ac.createBiquadFilter(); lp.type="lowpass"; lp.frequency.value=2200;
+    const bp=ac.createBiquadFilter(); bp.type="bandpass";
+    bp.frequency.value=620; bp.Q.value=.8;
+    const swp=ac.createOscillator(), swg=ac.createGain(); // 霧のフィルタが約41秒で揺らぐ
+    swp.frequency.value=1/41; swg.gain.value=280;
+    swp.connect(swg).connect(bp.frequency); swp.start();
+    const bg=audio.bedG=ac.createGain(); bg.gain.value=0;
+    src.connect(lp).connect(bp).connect(bg);
+    bg.connect(audio.master);
+    const fs=ac.createGain(); fs.gain.value=.4; bg.connect(fs).connect(audio.farBus);
+    src.start();
+  }
 }
 /* 軌道半径→音の奥行き（R150=核の間近 0 ・ R340=最遠 1） */
 function farDepth(bot){ return clamp((bot.R-150)/190,0,1); }
@@ -926,6 +955,8 @@ function unlockAudio(){
     audio.farGate.gain.setTargetAtTime(.55,audio.ctx.currentTime,1.0);
   }
   if(!piano.t) piano.t=setTimeout(pianoPhrase, 8000+Math.random()*6000);
+  if(!audio._bedLogged){ audio._bedLogged=true;
+    addLog("BACKGROUND ─ STEAM · CMB 2.725 K"); }
 }
 function bell(freq,gain,bot){
   if(!audio.ctx||audio.ctx.state!=="running") return;
@@ -1125,6 +1156,11 @@ function rebalanceHarmony(){
   if(audio.tone)
     audio.tone.frequency.setTargetAtTime(
       Math.max(1280, 1750-60*Math.max(0,act.length-3)-3*pct), now, 2.5);
+  // 蒸留の白霧：灯した層の数だけ蒸気が濃くなる。
+  // 全消灯でも零にはせず、宇宙背景の囁き（2.725Kの名残）を床に敷く
+  if(audio.bedG)
+    audio.bedG.gain.setTargetAtTime(
+      act.length ? .0035+.0011*Math.min(6,act.length) : .0016, now, 3);
 }
 const DUCK_SCALE=1.5; // 試聴で校正した係数（擦れ→部分音の沈め量）
 
@@ -1169,6 +1205,53 @@ function pianoNote(freq,vel,delay){
     ng.gain.exponentialRampToValueAtTime(.0001,t0+.09);
     src.connect(lp).connect(ng).connect(g); src.start(t0);
   }
+}
+/* 彗星の航跡音：視野を横切る6.5秒、ノイズが高みから低みへ滑降しながら
+   映像のパンと同期して流れる（鈴と閃光に続く、音と映像の同期の教義） */
+function cometSound(p0,p1,dur){
+  if(!audio.ctx||audio.ctx.state!=="running"||!audio.on) return;
+  const ac=audio.ctx, t0=ac.currentTime;
+  const src=ac.createBufferSource(); src.buffer=makeNoise(ac,2); src.loop=true;
+  const bp=ac.createBiquadFilter(); bp.type="bandpass"; bp.Q.value=2.2;
+  bp.frequency.setValueAtTime(1900,t0);
+  bp.frequency.exponentialRampToValueAtTime(170,t0+dur);
+  const g=ac.createGain();
+  g.gain.setValueAtTime(0,t0);
+  g.gain.linearRampToValueAtTime(.007,t0+dur*.3);
+  g.gain.linearRampToValueAtTime(0,t0+dur);
+  let out=g;
+  if(ac.createStereoPanner){
+    const pan=ac.createStereoPanner();
+    pan.pan.setValueAtTime(clamp(p0.x/700,-.8,.8),t0);
+    pan.pan.linearRampToValueAtTime(clamp(p1.x/700,-.8,.8),t0+dur);
+    g.connect(pan); out=pan;
+  }
+  out.connect(audio.master);
+  if(audio.farBus){ const fs=ac.createGain(); fs.gain.value=.5; out.connect(fs).connect(audio.farBus); }
+  src.connect(bp).connect(g);
+  src.start(t0); src.stop(t0+dur+.1);
+}
+/* 記録の針音：観測記録が一行刻まれるたび、ペン先のような微かなクラックル */
+let lastCrk=0;
+function crackle(){
+  if(!audio.ctx||audio.ctx.state!=="running"||!audio.on) return;
+  const now=performance.now();
+  if(now-lastCrk<350) return; // 記録が立て込む夜も、針は慎ましく
+  lastCrk=now;
+  const ac=audio.ctx, t0=ac.currentTime;
+  const src=ac.createBufferSource(); src.buffer=makeNoise(ac,.03);
+  const hp=ac.createBiquadFilter(); hp.type="highpass";
+  hp.frequency.value=1400+Math.random()*900;
+  const g=ac.createGain();
+  g.gain.setValueAtTime(.003+Math.random()*.004,t0);
+  g.gain.exponentialRampToValueAtTime(.0001,t0+.022);
+  let out=g;
+  if(ac.createStereoPanner){
+    const pan=ac.createStereoPanner();
+    pan.pan.value=(Math.random()*2-1)*.25; g.connect(pan); out=pan;
+  }
+  out.connect(audio.master); // 針音は机の上＝乾いた近接音のまま
+  src.connect(hp).connect(g); src.start(t0);
 }
 function pianoPhrase(){
   piano.t=setTimeout(pianoPhrase, 14000+Math.random()*16000);
@@ -1421,6 +1504,7 @@ function addLog(msg){
   logLines.push(`${ts}  ${msg}`);
   if(logLines.length>5) logLines.shift();
   logEl.textContent=logLines.join("\n");
+  crackle(); // 記録が刻まれる音
 }
 
 /* 観測データの読み（計器） */
