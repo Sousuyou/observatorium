@@ -49,6 +49,16 @@
     ・宇宙背景の囁き ─ 全消灯でも 2.725K の極小ヒスが「聴いている」気配を残す
     ・彗星の航跡音 ─ 横断の6.5秒、1900→170Hzへ滑降し映像のパンと同期
     ・記録の針音 ─ 観測記録が一行刻まれるたび、ペン先のクラックル
+
+    v1.9「雨の夜」── オンオフできるホワイトノイズ（SP.00）：
+    観測者には、雨の夜がある。望遠鏡は休み、温室の屋根を雨が叩き、
+    土からゲオスミンが立ちのぼる──ボタニカルがいちばん香る夜。
+    ・標本箱の先頭の札 SP.00「雨」（Pluvia nocturna）で雨を降らせ、止ませる
+    ・植物ではないから軌道も音程も持たない（雨は巡らず、ただ降る）
+    ・音＝窓のウォッシュ＋屋根のとどろき＋一粒ずつの雨滴（パン散らし）
+    ・映像＝星が翳り、細い銀の雨脈が落ちる。HUDに WEATHER 行
+    ・成分索引に GEOSMIN / 2-MIB が載り、調書にデカリン骨格の図版
+    ・レシピURLにも rain として刻まれる。「還」で夜明けと共に雨も上がる
   */
   :root{
     --ink:#e8edf8; --dim:#7d87a6; --hair:rgba(205,216,240,.14);
@@ -113,8 +123,9 @@
     font-family:var(--mono); font-size:8.5px; letter-spacing:.18em;
     color:rgba(150,162,195,.62); line-height:2.1; white-space:pre;
   }
-  .hud-bl{ left:max(30px, env(safe-area-inset-left)); bottom:250px; }
-  .hud-br{ right:max(30px, env(safe-area-inset-right)); bottom:250px; text-align:right; }
+  /* 下部UIは調合台の実測高さ（--benchH、JSが計測）に追従する。固定値で重ねない */
+  .hud-bl{ left:max(30px, env(safe-area-inset-left)); bottom:calc(var(--benchH,200px) + 50px); }
+  .hud-br{ right:max(30px, env(safe-area-inset-right)); bottom:calc(var(--benchH,200px) + 50px); text-align:right; }
   .hud b{ color:rgba(233,212,163,.8); font-weight:400; }
 
   /* 標本調書：点灯中の標本を巡回表示（香気成分・ノート・純正律の音程） */
@@ -169,13 +180,14 @@
 
   /* 観測記録：流れるライブログ */
   .log{
-    position:fixed; left:max(30px, env(safe-area-inset-left)); bottom:332px; z-index:2;
+    position:fixed; left:max(30px, env(safe-area-inset-left));
+    bottom:calc(var(--benchH,200px) + 192px); z-index:2;
     font-family:var(--mono); font-size:8px; letter-spacing:.12em;
     color:rgba(150,162,195,.42); line-height:2.05; white-space:pre; pointer-events:none;
   }
 
   .hint{
-    position:fixed; left:50%; bottom:264px; transform:translateX(-50%);
+    position:fixed; left:50%; bottom:calc(var(--benchH,200px) + 64px); transform:translateX(-50%);
     z-index:2; margin:0; pointer-events:none; text-align:center;
     font-size:11px; letter-spacing:.34em; color:#aab4d2;
     animation:hb 5.5s ease-in-out infinite; transition:opacity 1.4s;
@@ -223,7 +235,7 @@
     .tools{ gap:6px; }
     .tools button{ width:36px; height:36px; font-size:12px; }
     .motto{ display:none; }
-    .hud-bl{ bottom:186px; font-size:8.5px; }
+    .hud-bl{ bottom:calc(var(--benchH,140px) + 34px); font-size:8.5px; }
     .hud-br{ display:none; } /* 狭い画面では計器を方位のみに */
     .log{ display:none; }
     .dossier{ display:none; }
@@ -233,7 +245,7 @@
       padding:0 0 0 10px; font-size:8.5px; line-height:2;
       max-height:32vh; overflow:hidden;
     }
-    .hint{ bottom:228px; font-size:10.5px; letter-spacing:.22em; width:92vw; }
+    .hint{ bottom:calc(var(--benchH,140px) + 76px); font-size:10.5px; letter-spacing:.22em; width:92vw; }
     .bench{ width:100vw; gap:7px; }
     .formulary{ /* 処方箋・銘酒も横にすべる棚に */
       width:100%; overflow-x:auto; justify-content:flex-start;
@@ -568,7 +580,12 @@ const coreC=document.createElement("canvas");
   g.addColorStop(1,"rgba(80,90,160,0)");
   c.fillStyle=g; c.fillRect(0,0,S,S);
 })();
+function measureBench(){ // 調合台の実測高さをCSSへ渡す（下部UIの衝突防止）
+  const bench=document.querySelector(".bench");
+  if(bench) document.documentElement.style.setProperty("--benchH",bench.offsetHeight+"px");
+}
 function resize(){
+  measureBench();
   const dpr=Math.min(window.devicePixelRatio||1, 1.5); // 解像度上限（発熱対策）
   CW=canvas.width=Math.floor(innerWidth*dpr);
   CH=canvas.height=Math.floor(innerHeight*dpr);
@@ -1253,6 +1270,73 @@ function crackle(){
   out.connect(audio.master); // 針音は机の上＝乾いた近接音のまま
   src.connect(hp).connect(g); src.start(t0);
 }
+
+/* ============================ 4.7 雨の夜（SP.00） ============================ */
+/* 観測者には、雨の夜がある。望遠鏡は休み、温室の屋根を雨が叩き、
+   土からゲオスミンが立ちのぼる──ボタニカルがいちばん香る夜。
+   雨は植物ではないから軌道を持たず、音程も持たない。巡らず、ただ降る */
+const rain={on:false,g:null,dropT:null,dropBuf:null};
+const RAIN_COMPS=["GEOSMIN","2-METHYLISOBORNEOL"]; // 実在の「雨の香り」成分
+function rainAudioOn(){
+  unlockAudio();
+  const ac=audio.ctx, now=ac.currentTime;
+  if(!rain.g){
+    const g=rain.g=ac.createGain(); g.gain.value=0;
+    // 窓に当たる雨の面（中域のウォッシュ）
+    const s1=ac.createBufferSource(); s1.buffer=makeNoise(ac,4); s1.loop=true;
+    const bp=ac.createBiquadFilter(); bp.type="bandpass";
+    bp.frequency.value=1900; bp.Q.value=.55;
+    const wg=ac.createGain(); wg.gain.value=.8;
+    s1.connect(bp).connect(wg).connect(g);
+    // 屋根の低いとどろき
+    const s2=ac.createBufferSource(); s2.buffer=makeNoise(ac,4); s2.loop=true;
+    const lp=ac.createBiquadFilter(); lp.type="lowpass"; lp.frequency.value=230;
+    const lg2=ac.createGain(); lg2.gain.value=.5;
+    s2.connect(lp).connect(lg2).connect(g);
+    // 雨脚のゆらぎ（強まり、また弱まる）
+    const lfo=ac.createOscillator(), lg=ac.createGain();
+    lfo.frequency.value=.045; lg.gain.value=.0035;
+    lfo.connect(lg).connect(g.gain); lfo.start();
+    g.connect(audio.master);
+    const fs=ac.createGain(); fs.gain.value=.3; g.connect(fs).connect(audio.farBus);
+    s1.start(); s2.start();
+  }
+  rain.g.gain.setTargetAtTime(.016, now, 2.5);
+  scheduleDrop();
+}
+function scheduleDrop(){ // 一粒ずつ：ドームの硝子を叩く小さな点
+  if(!rain.on) return;
+  rain.dropT=setTimeout(scheduleDrop, 50+Math.random()*130);
+  if(!audio.ctx||audio.ctx.state!=="running"||!audio.on) return;
+  const ac=audio.ctx, t0=ac.currentTime;
+  if(!rain.dropBuf) rain.dropBuf=makeNoise(ac,.05);
+  const src=ac.createBufferSource(); src.buffer=rain.dropBuf;
+  const bp=ac.createBiquadFilter(); bp.type="bandpass";
+  bp.frequency.value=2300+Math.random()*3200; bp.Q.value=5;
+  const g=ac.createGain();
+  g.gain.setValueAtTime(.0015+Math.random()*.005,t0);
+  g.gain.exponentialRampToValueAtTime(.0001,t0+.02+Math.random()*.025);
+  let out=g;
+  if(ac.createStereoPanner){
+    const p=ac.createStereoPanner();
+    p.pan.value=(Math.random()*2-1)*.7; g.connect(p); out=p;
+  }
+  out.connect(audio.master);
+  src.connect(bp).connect(g); src.start(t0);
+}
+function rainAudioOff(){
+  clearTimeout(rain.dropT);
+  if(rain.g&&audio.ctx) rain.g.gain.setTargetAtTime(0,audio.ctx.currentTime,1.2);
+}
+function toggleRain(on,opts){
+  opts=opts||{};
+  rain.on=on;
+  const el=document.getElementById("sp00");
+  if(el) el.classList.toggle("on",on);
+  if(on) rainAudioOn(); else rainAudioOff();
+  if(!opts.quiet) addLog(on?"WEATHER ─ RAIN BEGINS · PETRICHOR":"WEATHER ─ RAIN ENDS");
+  syncHash(); updateHud(); updateDossier(); updateCindex();
+}
 function pianoPhrase(){
   piano.t=setTimeout(pianoPhrase, 14000+Math.random()*16000);
   const act=BOTS.filter(b=>state.active[b.id]);
@@ -1293,6 +1377,19 @@ function pianoPhrase(){
 const state={ active:{} };
 const hintEl=document.getElementById("hint");
 const wrap=document.getElementById("specimens");
+{ // SP.00 雨：標本箱の先頭に置かれた、植物ではない唯一の札
+  const el=document.createElement("button");
+  el.className="spec"; el.id="sp00";
+  el.style.setProperty("--c","rgb(165,195,235)");
+  el.title="雨 — 観測は休み、ボタニカルがいちばん香る夜";
+  el.innerHTML=`<span class="no">SP.00 · SKY</span>`+
+               `<span class="latin">Pluvia nocturna</span>`+
+               `<span class="jp">雨</span>`+
+               `<span class="hz">NOISE ─ 0.8–6 kHz</span>`+
+               `<i class="lamp"></i>`;
+  el.addEventListener("click",()=>{ toggleRain(!rain.on); hintEl.classList.add("off"); });
+  wrap.appendChild(el);
+}
 BOTS.forEach(b=>{
   const el=document.createElement("button");
   el.className="spec"; el.dataset.id=b.id;
@@ -1406,7 +1503,8 @@ function toggleBot(b,on,opts){
 /* レシピのURL共有：点灯状態がそのままURLに刻まれ、リンクを開けば同じ配合が再現される */
 function syncHash(){
   try{
-    const ids=BOTS.filter(b=>state.active[b.id]).map(b=>b.id).join(".");
+    const ids=(rain.on?["rain"]:[])
+      .concat(BOTS.filter(b=>state.active[b.id]).map(b=>b.id)).join(".");
     history.replaceState(null,"", ids?"#r="+ids:location.pathname);
   }catch(e){}
 }
@@ -1481,6 +1579,7 @@ document.getElementById("root").addEventListener("click",function(){
 });
 document.getElementById("dawn").addEventListener("click",()=>{
   for(const b of BOTS) if(state.active[b.id]) toggleBot(b,false,{quiet:true});
+  if(rain.on) toggleRain(false,{quiet:true}); // 夜明けには雨も上がる
   addLog("ALL LAYERS RELEASED");
 });
 document.getElementById("save").addEventListener("click",()=>{
@@ -1519,7 +1618,8 @@ function updateHud(){
     `TIMBRE HARMONIC SERIES <b>1·2·3·4·5</b>\n`+
     `HARMONY <b>${String(HARM.pct).padStart(2,"0")}%</b> ─ ${HARM.label}\n`+
     `LUNAR ${LUNAR.name} <b>${Math.round(LUNAR.k*100)}%</b>`+
-    (LUNAR.full?" ─ BELLS BRIGHTENED":"");
+    (LUNAR.full?" ─ BELLS BRIGHTENED":"")+
+    (rain.on?`\nWEATHER <b>RAIN</b> ─ PETRICHOR RISING`:"");
   const shown=act.slice(0,10);
   hudR.innerHTML=act.length
     ? shown.map(b=>`SP.${b.no} ${b.latin.split(" ")[0].toUpperCase()} ${b.rt} <b>${b.freq.toFixed(1)}Hz</b> ${b.note[0]}`).join("\n")
@@ -1533,9 +1633,10 @@ setInterval(updateHud,700);
 const cindexEl=document.getElementById("cindex");
 function updateCindex(){
   const act=BOTS.filter(b=>state.active[b.id]);
-  if(!act.length){ cindexEl.innerHTML=""; return; }
+  if(!act.length&&!rain.on){ cindexEl.innerHTML=""; return; }
   const map={};
   for(const b of act) for(const c of b.comps) (map[c]=map[c]||[]).push(b.no);
+  if(rain.on) for(const c of RAIN_COMPS) (map[c]=map[c]||[]).push("00"); // 雨の香りも索引に
   const rows=Object.entries(map)
     .sort((x,y)=> y[1].length-x[1].length || (x[0]<y[0]?-1:1));
   // 相性解析：いまの配合と最も多くの成分を共有する未点灯の標本を、研究所が次の一滴として勧める
@@ -1564,7 +1665,15 @@ function updateCindex(){
 let trace={comp:null,bots:[],start:0,until:0};
 function traceCompound(comp){
   const bots=BOTS.filter(b=>b.comps.includes(comp));
-  if(!bots.length) return;
+  if(!bots.length){
+    if(rain.on&&RAIN_COMPS.includes(comp)){ // 雨の成分は、雨の札へ還る
+      const el=document.getElementById("sp00");
+      if(el){ el.classList.remove("trace"); void el.offsetWidth; el.classList.add("trace");
+        setTimeout(()=>el.classList.remove("trace"),2400); }
+      addLog(`TRACE ─ ${comp} → SP.00 PLUVIA`);
+    }
+    return;
+  }
   const t0=lastT||performance.now();
   trace={comp,bots:bots.map(b=>b.id),start:t0,until:t0+2600};
   addLog(`TRACE ─ ${comp} → ${bots.map(b=>"SP."+b.no).join("·")}`);
@@ -1656,6 +1765,12 @@ const MOL={
     [3.48,0,4.35,-.5,1],[4.35,-.5,5.22,0,2],[5.22,0,6.09,-.5,1],
     [6.09,-.5,6.96,0,2],[6.96,0,7.83,-.5,1],[7.83,-.5,8.7,0,2],[8.7,0,9.57,-.5,1]]},
   "PENTADECANOLIDE":{ f:"C15H28O2", a:null, b:null }, // 麝香の大環：起動時に環を生成
+  "GEOSMIN":{ f:"C12H22O", a:[[.87,1.5,"OH"]], b:[ // 雨上がりの土の香り：デカリン骨格
+    [0,-1,.87,-.5,1],[.87,-.5,.87,.5,1],[.87,.5,0,1,1],[0,1,-.87,.5,1],
+    [-.87,.5,-.87,-.5,1],[-.87,-.5,0,-1,1],
+    [.87,-.5,1.74,-1,1],[1.74,-1,2.61,-.5,1],[2.61,-.5,2.61,.5,1],
+    [2.61,.5,1.74,1,1],[1.74,1,.87,.5,1],
+    [.87,.5,.87,1.5,1],[.87,-.5,.87,-1.5,1],[-.87,.5,-1.74,1,1]]},
   "MYRISTICIN":{ f:"C11H12O3", a:[[-1.75,-.75,"O"],[-1.75,.75,"O"],[.87,-1.5,"O"]], b:[
     [0,-1,.87,-.5,1],[.87,-.5,.87,.5,2],[.87,.5,0,1,1],[0,1,-.87,.5,2],
     [-.87,.5,-.87,-.5,1],[-.87,-.5,0,-1,2],
@@ -1721,11 +1836,25 @@ const dossierEl=document.getElementById("dossier");
 let dossierIdx=0;
 function updateDossier(){
   const act=BOTS.filter(b=>state.active[b.id]);
-  if(!act.length){
+  const total=act.length+(rain.on?1:0);
+  if(!total){
     dossierEl.innerHTML=`<b>SPECIMEN DOSSIER</b>\nSTANDBY ─ NO SPECIMEN UNDER OBSERVATION`;
     return;
   }
-  const b=act[dossierIdx%act.length];
+  if(dossierIdx%total===act.length){ // 雨の調書（巡回の末尾に加わる）
+    dossierEl.innerHTML=
+      `<b>SPECIMEN DOSSIER ── SP.00</b>\n`+
+      `PLUVIA NOCTURNA ─ 雨\n`+
+      `NOTE      SKY ─ PETRICHOR（雨上がりの土の香り）\n`+
+      `COMPOUNDS ${RAIN_COMPS.join(" · ")}\n`+
+      `INTERVAL  ─ UNPITCHED（音程を持たない）\n`+
+      `FREQ      0.8–6 kHz BROADBAND\n`+
+      `ORBIT     NONE ─ 雨は巡らず、ただ降る`+
+      molSvg("GEOSMIN")+
+      `FIG. ─ GEOSMIN（C12H22O）`;
+    return;
+  }
+  const b=act[dossierIdx%total];
   const octTxt=b.oct===.5?"−1 OCT":b.oct===2?"+1 OCT":"±0 OCT";
   const noteTxt=b.note==="BASE"?"BASE ─ AFTERNOTE（残香）":b.note==="TOP"?"TOP（立ち香）":"MIDDLE（中盤）";
   dossierEl.innerHTML=
@@ -1775,7 +1904,25 @@ function composeFrame(t){
   ctx.globalAlpha=1; ctx.globalCompositeOperation="source-over";
   drawObservatory(t);
   drawComet();
+  drawRain(t);
   drawTape(t);
+}
+/* 雨の夜：星はわずかに翳り、ドームの窓を細い銀の雨脈が伝う */
+function drawRain(t){
+  if(!rain.on) return;
+  ctx.fillStyle="rgba(6,8,14,.06)"; ctx.fillRect(0,0,CW,CH); // 雲の薄衣
+  ctx.globalCompositeOperation="lighter";
+  for(let i=0;i<14;i++){
+    const seed=i*137.508;
+    const x=((seed*.733)%1)*CW;
+    const len=(.05+((i*13)%7)/7*.05)*CH;
+    const speed=.00009+.00004*((i*7)%5)/4;
+    const y=(((t*speed)+(seed%1))%1)*(CH+len)-len;
+    ctx.strokeStyle=`rgba(180,200,235,${.05+.04*Math.abs(Math.sin(i*2.4))})`;
+    ctx.lineWidth=.7*U;
+    ctx.beginPath(); ctx.moveTo(x,y); ctx.lineTo(x+CW*.004,y+len); ctx.stroke();
+  }
+  ctx.globalCompositeOperation="source-over";
 }
 let lastT=0, lastDraw=0;
 function tick(t){
@@ -1790,6 +1937,7 @@ function tick(t){
   composeFrame(t);
 }
 resize();
+setTimeout(measureBench,600); // フォント読込後の折返し変化に追従
 updateHud();
 updateDossier();
 updateCindex();
@@ -1800,7 +1948,10 @@ if(LUNAR.full) addLog("FULL MOON ─ ALL BELLS BRIGHTENED");
   const m=/[#&]r=([a-z.]+)/.exec(location.hash);
   if(!m) return;
   let n=0;
-  for(const id of m[1].split(".")) if(BOT[id]){ toggleBot(BOT[id],true,{quiet:true}); n++; }
+  for(const id of m[1].split(".")){
+    if(id==="rain"){ toggleRain(true,{quiet:true}); n++; continue; }
+    if(BOT[id]){ toggleBot(BOT[id],true,{quiet:true}); n++; }
+  }
   if(n){ addLog(`RECIPE RESTORED ─ ${String(n).padStart(2,"0")} LAYERS`); hintEl.classList.add("off"); }
 })();
 requestAnimationFrame(tick);
