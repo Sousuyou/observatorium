@@ -1,0 +1,1277 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>香の天文台 — Observatorium Botanicum</title>
+<meta name="description" content="香の天文台 — ジンのボタニカル16種を音と軌道の層として灯す、純正律の生成アンビエント観測室。宇宙と植物の、交わる場所。">
+<meta property="og:title" content="香の天文台 — Observatorium Botanicum">
+<meta property="og:description" content="ジンのボタニカルを灯すと、純正律のアンビエントが重なり、渾天儀が巡る。">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://sousuyou.github.io/observatorium/">
+<meta property="og:image" content="https://sousuyou.github.io/observatorium/og-image.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="香の天文台 — Observatorium Botanicum">
+<meta name="twitter:description" content="ジンのボタニカルを灯すと、純正律のアンビエントが重なり、渾天儀が巡る。">
+<meta name="twitter:image" content="https://sousuyou.github.io/observatorium/og-image.png">
+<style>
+  /*
+    香の天文台 — OBSERVATORIUM BOTANICUM
+    宇宙とボタニカルが交わる観測室。
+    下段の標本札（ジンの主要ボタニカル10種・ラテン学名）に触れると、
+    その香りのアンビエント層が灯り、中央の渾天儀に軌道環がひとつ加わる。
+    層は重なるほど壮大な和音となり（全層が純正律で必ず調和する設計）、
+    映像は触れられない——ただ威風をもって、立体的に回り続ける。
+    鈴が鳴る瞬間、その軌道の星が光る（音と映像の同期）。
+
+    省電力契約：fps上限30／無灯時は8fps・WebGL不使用・DPR1.5上限・
+    タブ非表示・消音時は AudioContext を停止
+  */
+  :root{
+    --ink:#e8edf8; --dim:#7d87a6; --hair:rgba(205,216,240,.14);
+    --gold:#cdb98c; --mono:"SF Mono","Menlo","Courier New",monospace;
+    --serif:"Hiragino Mincho ProN","Yu Mincho",Georgia,serif;
+    --sans:"Hiragino Sans","Helvetica Neue",Arial,sans-serif;
+  }
+  *{ box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  html,body{ height:100%; margin:0; overflow:hidden; background:#040508; }
+  body{ font-family:var(--serif); color:var(--ink); }
+  #g{ position:fixed; inset:0; display:block; pointer-events:none; } /* 映像には触れられない */
+
+  /* 観測室の枠：細いヘアラインと四隅の照準 */
+  .frame{ position:fixed; inset:11px; border:1px solid var(--hair); pointer-events:none; z-index:2; }
+  .frame i{ position:absolute; width:13px; height:13px; pointer-events:none; }
+  .frame i::before,.frame i::after{ content:""; position:absolute; background:rgba(205,216,240,.34); }
+  .frame i::before{ width:13px; height:1px; top:6px; }
+  .frame i::after{ width:1px; height:13px; left:6px; }
+  .frame .c1{ left:-7px; top:-7px; } .frame .c2{ right:-7px; top:-7px; }
+  .frame .c3{ left:-7px; bottom:-7px; } .frame .c4{ right:-7px; bottom:-7px; }
+
+  .brand{
+    position:fixed; left:max(30px, env(safe-area-inset-left));
+    top:max(26px, env(safe-area-inset-top)); z-index:3; pointer-events:none;
+  }
+  .brand h1{
+    margin:0; font-weight:500; font-size:clamp(20px,2.6vw,30px);
+    letter-spacing:.52em; color:#f1ecdc;
+    text-shadow:0 0 22px rgba(233,212,163,.25);
+  }
+  .brand .lat{
+    margin:.9em 0 0; font-family:var(--mono); font-size:8.5px; letter-spacing:.42em;
+    color:var(--dim); text-transform:uppercase;
+  }
+  .brand .rule{ width:118px; height:1px; background:linear-gradient(90deg,var(--gold),transparent); margin-top:12px; opacity:.55; }
+
+  /* 右縁の縦書きの銘 */
+  .motto{
+    position:fixed; right:max(26px, env(safe-area-inset-right)); top:50%;
+    transform:translateY(-50%); z-index:2; pointer-events:none;
+    writing-mode:vertical-rl; font-size:10.5px; letter-spacing:.62em; color:rgba(155,165,195,.5);
+  }
+
+  .tools{
+    position:fixed; right:max(24px, env(safe-area-inset-right));
+    top:max(22px, env(safe-area-inset-top));
+    display:flex; gap:8px; z-index:4;
+  }
+  .tools button{
+    width:38px; height:38px; border-radius:50%;
+    border:1px solid rgba(205,216,240,.22); background:rgba(8,10,16,.35);
+    backdrop-filter:blur(8px); -webkit-backdrop-filter:blur(8px);
+    color:var(--gold); font-size:13px; font-family:var(--serif); cursor:pointer;
+    opacity:.55; transition:.25s;
+  }
+  .tools button:hover{ opacity:1; border-color:rgba(233,212,163,.55); }
+  .tools button.on{ opacity:1; background:rgba(233,212,163,.16); border-color:rgba(233,212,163,.7); }
+
+  /* 観測データ（計器の読み） */
+  .hud{
+    position:fixed; z-index:2; pointer-events:none;
+    font-family:var(--mono); font-size:8.5px; letter-spacing:.18em;
+    color:rgba(150,162,195,.62); line-height:2.1; white-space:pre;
+  }
+  .hud-bl{ left:max(30px, env(safe-area-inset-left)); bottom:218px; }
+  .hud-br{ right:max(30px, env(safe-area-inset-right)); bottom:218px; text-align:right; }
+  .hud b{ color:rgba(233,212,163,.8); font-weight:400; }
+
+  /* 標本調書：点灯中の標本を巡回表示（香気成分・ノート・純正律の音程） */
+  .dossier{
+    position:fixed; left:max(30px, env(safe-area-inset-left)); top:142px; z-index:2;
+    font-family:var(--mono); font-size:8.5px; letter-spacing:.14em;
+    color:rgba(150,162,195,.66); line-height:2.05; white-space:pre;
+    pointer-events:none; border-left:1px solid var(--hair); padding-left:12px;
+  }
+  .dossier b{ color:rgba(233,212,163,.85); font-weight:400; }
+
+  /* 成分索引：点灯中の全香気成分の集計。共有成分（×2以上）は金で結ばれる */
+  .cindex{
+    position:fixed; right:max(30px, env(safe-area-inset-right)); top:142px; z-index:3;
+    font-family:var(--mono); font-size:8.5px; letter-spacing:.14em;
+    color:rgba(150,162,195,.66); line-height:2.05; white-space:pre; text-align:right;
+    pointer-events:auto; border-right:1px solid var(--hair); padding-right:12px;
+  }
+  .cindex b{ color:rgba(233,212,163,.85); font-weight:400; }
+  .cindex .cc{ cursor:pointer; transition:color .2s; } /* 成分名に触れると逆引き */
+  .cindex .cc:hover{ color:#e9dfc2; }
+  .spec.trace{ animation:traceFlash .55s ease 4; } /* 逆引きで該当標本の札が明滅 */
+  @keyframes traceFlash{
+    0%,100%{ box-shadow:none; }
+    50%{ border-color:var(--c); box-shadow:0 0 14px var(--c); }
+  }
+
+  /* 調合台：処方箋と標本札をひとつに積む（どの画面幅でも重ならない） */
+  .bench{
+    position:fixed; left:50%; bottom:max(14px, env(safe-area-inset-bottom));
+    transform:translateX(-50%); z-index:4;
+    display:flex; flex-direction:column; align-items:center; gap:9px;
+    width:min(1380px,97.5vw);
+  }
+  /* 処方箋：古典〜現代のジン様式をワンタップで再現する調合の譜 */
+  .formulary{ display:flex; align-items:center; gap:6px; }
+  .formulary .fl{
+    font-family:var(--mono); font-size:7.5px; letter-spacing:.3em;
+    color:rgba(150,162,195,.5); margin-right:4px; white-space:nowrap;
+  }
+  .formula{
+    font-family:var(--mono); font-size:8px; letter-spacing:.16em;
+    color:rgba(190,200,225,.7); background:rgba(7,9,15,.5);
+    border:1px solid var(--hair); padding:5px 11px; cursor:pointer; transition:.25s;
+    text-transform:uppercase; white-space:nowrap;
+    backdrop-filter:blur(6px); -webkit-backdrop-filter:blur(6px);
+  }
+  .formula:hover{ border-color:rgba(233,212,163,.5); color:#e9dfc2; }
+  .formula.on{ border-color:rgba(233,212,163,.75); color:var(--gold); background:rgba(233,212,163,.08); }
+
+  /* 観測記録：流れるライブログ */
+  .log{
+    position:fixed; left:max(30px, env(safe-area-inset-left)); bottom:300px; z-index:2;
+    font-family:var(--mono); font-size:8px; letter-spacing:.12em;
+    color:rgba(150,162,195,.42); line-height:2.05; white-space:pre; pointer-events:none;
+  }
+
+  .hint{
+    position:fixed; left:50%; bottom:232px; transform:translateX(-50%);
+    z-index:2; margin:0; pointer-events:none; text-align:center;
+    font-size:11px; letter-spacing:.34em; color:#aab4d2;
+    animation:hb 5.5s ease-in-out infinite; transition:opacity 1.4s;
+  }
+  @keyframes hb{ 0%,100%{opacity:.85} 50%{opacity:.4} }
+  .hint.off{ animation:none; opacity:0; }
+
+  /* 標本札：ラテン学名の付いた研究所のタグ。押すと層が灯る（複数同時可） */
+  .specimens{
+    display:flex; flex-wrap:wrap; justify-content:center; gap:5px; width:100%;
+  }
+  .spec{
+    position:relative; padding:7px 10px 6px 13px;
+    background:rgba(7,9,15,.55); border:1px solid var(--hair);
+    cursor:pointer; text-align:left; transition:.3s;
+    display:flex; flex-direction:column; gap:2.5px;
+    backdrop-filter:blur(6px); -webkit-backdrop-filter:blur(6px);
+  }
+  .spec::before{ /* 左縁の色標 */
+    content:""; position:absolute; left:-1px; top:-1px; bottom:-1px; width:2px;
+    background:var(--c); opacity:.3; transition:.3s;
+  }
+  .spec .no{ font-family:var(--mono); font-size:7.5px; letter-spacing:.3em; color:rgba(150,162,195,.55); }
+  .spec .latin{
+    font-family:var(--mono); font-size:7px; letter-spacing:.07em;
+    color:rgba(190,200,225,.75); text-transform:uppercase; white-space:nowrap;
+  }
+  .spec .jp{ font-family:var(--sans); font-size:10.5px; letter-spacing:.1em; color:var(--dim); transition:.3s; white-space:nowrap; }
+  .spec .hz{ font-family:var(--mono); font-size:6.5px; letter-spacing:.1em; color:rgba(150,162,195,.45); white-space:nowrap; }
+  .spec .lamp{
+    position:absolute; right:9px; top:9px; width:5px; height:5px; border-radius:50%;
+    background:rgba(120,130,160,.3); transition:.35s;
+  }
+  .spec:hover{ border-color:rgba(205,216,240,.34); }
+  .spec.on{ border-color:var(--c); background:rgba(10,13,22,.78); }
+  .spec.on::before{ opacity:1; box-shadow:0 0 10px var(--c); }
+  .spec.on .jp{ color:#eef2fc; }
+  .spec.on .lamp{ background:var(--c); box-shadow:0 0 8px var(--c); animation:lampPulse 2.6s ease-in-out infinite; }
+  @keyframes lampPulse{ 0%,100%{opacity:1} 50%{opacity:.45} }
+
+  @media (max-width:760px){
+    .brand h1{ font-size:14px; letter-spacing:.26em; }
+    .brand .lat{ font-size:7px; letter-spacing:.22em; }
+    .tools button{ width:34px; height:34px; font-size:12px; }
+    .motto{ display:none; }
+    .hud-bl{ bottom:152px; font-size:7.5px; }
+    .hud-br{ display:none; } /* 狭い画面では計器を方位のみに */
+    .log{ display:none; }
+    .dossier{ display:none; }
+    .cindex{ /* スマホでは調書の位置（左上）に置き、逆引きも使えるように */
+      left:16px; right:auto; top:118px; text-align:left;
+      border-right:none; border-left:1px solid var(--hair);
+      padding:0 0 0 10px; font-size:7px; line-height:1.95;
+      max-height:30vh; overflow:hidden;
+    }
+    .hint{ bottom:196px; font-size:9.5px; width:90vw; }
+    .bench{ width:100vw; gap:7px; }
+    .formulary{ /* 処方箋も横にすべる棚に */
+      width:100%; overflow-x:auto; justify-content:flex-start;
+      padding:0 12px; scrollbar-width:none;
+    }
+    .formulary::-webkit-scrollbar{ display:none; }
+    .specimens{ /* 16標本は横にすべる一列の棚に */
+      flex-wrap:nowrap; overflow-x:auto; justify-content:flex-start;
+      width:100%; padding:0 12px 4px;
+      -webkit-overflow-scrolling:touch; scrollbar-width:none;
+    }
+    .specimens::-webkit-scrollbar{ display:none; }
+    .spec{ min-width:128px; padding:7px 8px 6px 11px; }
+    .spec .latin{ font-size:6.5px; }
+  }
+</style>
+</head>
+<body>
+  <div class="frame"><i class="c1"></i><i class="c2"></i><i class="c3"></i><i class="c4"></i></div>
+  <canvas id="g"></canvas>
+
+  <header class="brand">
+    <h1>香 の 天 文 台</h1>
+    <p class="lat">Observatorium Botanicum ─ Gin Essence × Cosmos</p>
+    <div class="rule"></div>
+  </header>
+
+  <aside class="motto">宇宙と植物の、交わる場所。</aside>
+
+  <nav class="tools">
+    <button id="auto" title="自動観測 ─ 層がひとりでに移ろう">演</button>
+    <button id="mute" title="音を響かせる / 黙らせる">響</button>
+    <button id="dawn" title="すべての層を消灯する">還</button>
+    <button id="save" title="観測記録を保存する">影</button>
+  </nav>
+
+  <div class="hud hud-bl" id="hudL"></div>
+  <div class="hud hud-br" id="hudR"></div>
+  <div class="log" id="log"></div>
+  <div class="dossier" id="dossier"></div>
+  <div class="cindex" id="cindex"></div>
+
+  <p class="hint" id="hint">標 本 札 に 触 れ る と 、 香 り の 軌 道 と 音 が 灯 り ま す</p>
+  <div class="bench">
+    <nav class="formulary" id="formulary"><span class="fl">FORMULARY ──</span></nav>
+    <nav class="specimens" id="specimens"></nav>
+  </div>
+
+<script>
+"use strict";
+/* ============================ 0. 道具 ============================ */
+function makeRng(seed){ let a=seed>>>0; return function(){ a|=0; a=(a+0x6D2B79F5)|0;
+  let t=Math.imul(a^(a>>>15),1|a); t=(t+Math.imul(t^(t>>>7),61|t))^t;
+  return ((t^(t>>>14))>>>0)/4294967296; }; }
+function clamp(v,a,b){ return v<a?a:(v>b?b:v); }
+function lerp(a,b,t){ return a+(b-a)*t; }
+function lerpC(a,b,t){ return [lerp(a[0],b[0],t),lerp(a[1],b[1],t),lerp(a[2],b[2],t)]; }
+function rgba(c,a){ return `rgba(${c[0]|0},${c[1]|0},${c[2]|0},${a})`; }
+function ease(p){ return 1-Math.pow(1-p,3); }
+
+/* ============================ 1. 標本：ジンのボタニカル10種 ============================ */
+/* deep/lite＝軌道環の色（尾と白熱）。ratio×oct＝層の音程（純正律＝全層が必ず調和）。
+   音色設計：sub=体に届く低い根、noise=息のような気流、bells=鈴の言葉 */
+const ROOT=110;
+/* note＝揮発度のノート分類（BASEは残香＝アフターノート）。comps＝実在の主要香気成分（配列）。
+   rt/iv＝純正律の音程（根音に対する単純整数比、すべて5-リミット）。
+   e/peri＝軌道の離心率と近点（楕円軌道） */
+const BOTS=[
+  { id:"juniper",  no:"01", latin:"Juniperus communis",   jp:"ジュニパー",
+    note:"MIDDLE", comps:["α-PINENE","MYRCENE","SABINENE"],
+    rt:"1/1", iv:"PERFECT UNISON",
+    deep:[20,120,90],  lite:[170,255,215], ratio:1,   oct:1,
+    R:255, incl:.18,  node0:0.0, period:21000, prec:.000013, e:.08, peri:1.2,
+    snd:{pad:.024, bells:{octs:[2,4], every:[5200,10500], gain:.024}} },
+  { id:"coriander",no:"02", latin:"Coriandrum sativum",   jp:"コリアンダー",
+    note:"MIDDLE", comps:["LINALOOL","α-PINENE","CAMPHOR"],
+    rt:"9/8", iv:"MAJOR SECOND",
+    deep:[150,95,30],  lite:[255,225,165], ratio:9/8, oct:1,
+    R:238, incl:-.42, node0:1.1, period:19000, prec:-.000016, e:.14, peri:3.4,
+    snd:{pad:.02,  bells:{octs:[2,4], every:[4600,9000],  gain:.022}} },
+  { id:"angelica", no:"03", latin:"Angelica archangelica",jp:"アンジェリカ",
+    note:"BASE", comps:["α-PINENE","β-PHELLANDRENE","PENTADECANOLIDE"],
+    rt:"1/1", iv:"PERFECT UNISON",
+    deep:[55,75,180],  lite:[180,200,255], ratio:1,   oct:.5,
+    R:150, incl:.62,  node0:2.4, period:34000, prec:.00001, e:.05, peri:5.1,
+    snd:{pad:.032, sub:true, bells:{octs:[1,2], every:[9000,16000], gain:.02}} },
+  { id:"lemon",    no:"04", latin:"Citrus limon",         jp:"レモンピール",
+    note:"TOP", comps:["LIMONENE","β-PINENE","CITRAL"],
+    rt:"5/3", iv:"MAJOR SIXTH",
+    deep:[150,130,35], lite:[255,248,190], ratio:5/3, oct:2,
+    R:330, incl:-.12, node0:3.6, period:12500, prec:.00002, e:.18, peri:.6,
+    snd:{pad:.012, bells:{octs:[1,2], every:[3400,6800],  gain:.022}} },
+  { id:"orange",   no:"05", latin:"Citrus aurantium",     jp:"ビターオレンジ",
+    note:"TOP", comps:["LIMONENE","MYRCENE","LINALOOL"],
+    rt:"3/2", iv:"PERFECT FIFTH",
+    deep:[175,85,30],  lite:[255,200,145], ratio:3/2, oct:2,
+    R:312, incl:.34,  node0:4.6, period:13800, prec:-.000019, e:.12, peri:2.2,
+    snd:{pad:.013, bells:{octs:[1,1.5,2], every:[3800,7400], gain:.02}} },
+  { id:"orris",    no:"06", latin:"Iris pallida",         jp:"オリスルート",
+    note:"BASE", comps:["α-IRONE","γ-IRONE","MYRISTIC ACID"],
+    rt:"5/4", iv:"MAJOR THIRD",
+    deep:[95,60,170],  lite:[215,180,255], ratio:5/4, oct:1,
+    R:222, incl:-.58, node0:5.5, period:24500, prec:.000012, e:.07, peri:4.4,
+    snd:{pad:.026, bells:{octs:[2,3], every:[7000,13000], gain:.018}} },
+  { id:"cardamom", no:"07", latin:"Elettaria cardamomum", jp:"カルダモン",
+    note:"MIDDLE", comps:["1,8-CINEOLE","α-TERPINYL ACETATE"],
+    rt:"5/3", iv:"MAJOR SIXTH",
+    deep:[35,120,135], lite:[180,245,250], ratio:5/3, oct:1,
+    R:270, incl:.5,   node0:0.7, period:17000, prec:-.000014, e:.16, peri:1.9,
+    snd:{pad:.014, noise:true, bells:{octs:[2,4], every:[5600,10000], gain:.018}} },
+  { id:"cassia",   no:"08", latin:"Cinnamomum cassia",    jp:"カシア",
+    note:"BASE", comps:["CINNAMALDEHYDE","COUMARIN"],
+    rt:"4/3", iv:"PERFECT FOURTH",
+    deep:[160,40,55],  lite:[255,175,160], ratio:4/3, oct:1,
+    R:205, incl:-.26, node0:1.9, period:22500, prec:.000017, e:.1, peri:5.8,
+    snd:{pad:.022, trem:[4.6,.005], bells:{octs:[1,2], every:[6400,12000], gain:.02}} },
+  { id:"licorice", no:"09", latin:"Glycyrrhiza glabra",   jp:"リコリス",
+    note:"BASE", comps:["ANETHOLE","GLYCYRRHIZIN"],
+    rt:"5/4", iv:"MAJOR THIRD",
+    deep:[115,50,105], lite:[235,175,220], ratio:5/4, oct:.5,
+    R:170, incl:.06,  node0:2.9, period:30000, prec:-.00001, e:.06, peri:2.9,
+    snd:{pad:.03,  sub:true, bells:{octs:[2,4], every:[8800,15000], gain:.017}} },
+  { id:"paradise", no:"10", latin:"Aframomum melegueta",  jp:"グレインズ・オブ・パラダイス",
+    note:"MIDDLE", comps:["6-PARADOL","6-GINGEROL","HUMULENE"],
+    rt:"9/8", iv:"MAJOR SECOND",
+    deep:[160,50,115], lite:[255,180,225], ratio:9/8, oct:2,
+    R:292, incl:-.7,  node0:4.0, period:11500, prec:.000022, e:.2, peri:.2,
+    snd:{pad:.01,  bells:{octs:[2,4], every:[2400,5200],  gain:.015}} },
+  { id:"cubeb",    no:"11", latin:"Piper cubeba",         jp:"クベブ",
+    note:"MIDDLE", comps:["β-CUBEBENE","CUBEBOL","SABINENE"],
+    rt:"3/2", iv:"PERFECT FIFTH",
+    deep:[90,80,140],  lite:[200,190,240], ratio:3/2, oct:1,
+    R:282, incl:.42,  node0:5.0, period:16200, prec:.000018, e:.13, peri:4.9,
+    snd:{pad:.016, bells:{octs:[2,4], every:[5400,9800],  gain:.018}} },
+  { id:"lavender", no:"12", latin:"Lavandula angustifolia", jp:"ラベンダー",
+    note:"MIDDLE", comps:["LINALOOL","LINALYL ACETATE","CAMPHOR"],
+    rt:"5/4", iv:"MAJOR THIRD",
+    deep:[110,95,205], lite:[215,205,255], ratio:5/4, oct:2,
+    R:322, incl:-.5,  node0:2.0, period:13200, prec:-.000021, e:.17, peri:1.5,
+    snd:{pad:.013, bells:{octs:[1,2], every:[4800,9200],  gain:.018}} },
+  { id:"chamomile",no:"13", latin:"Matricaria chamomilla", jp:"カモミール",
+    note:"MIDDLE", comps:["α-BISABOLOL","CHAMAZULENE"],
+    rt:"4/3", iv:"PERFECT FOURTH",
+    deep:[145,120,45], lite:[255,235,165], ratio:4/3, oct:2,
+    R:214, incl:.7,   node0:3.1, period:14500, prec:.000015, e:.11, peri:3.0,
+    snd:{pad:.012, bells:{octs:[1,2], every:[5200,9600],  gain:.016}} },
+  { id:"yuzu",     no:"14", latin:"Citrus junos",         jp:"柚子",
+    note:"TOP", comps:["LIMONENE","LINALOOL","YUZUNONE"],
+    rt:"15/8", iv:"MAJOR SEVENTH",
+    deep:[135,145,45], lite:[240,255,175], ratio:15/8, oct:2,
+    R:340, incl:.08,  node0:.9,  period:11800, prec:.000024, e:.21, peri:5.5,
+    snd:{pad:.008, bells:{octs:[1,2], every:[3000,6200],  gain:.02}} },
+  { id:"sansho",   no:"15", latin:"Zanthoxylum piperitum", jp:"山椒",
+    note:"TOP", comps:["LIMONENE","CITRONELLAL","α-SANSHOOL"],
+    rt:"9/8", iv:"MAJOR SECOND",
+    deep:[85,135,75],  lite:[190,245,180], ratio:9/8, oct:2,
+    R:296, incl:-.62, node0:4.3, period:12600, prec:-.000017, e:.15, peri:2.6,
+    snd:{pad:.009, trem:[4.8,.004], bells:{octs:[1,2], every:[4200,8000], gain:.016}} },
+  { id:"nutmeg",   no:"16", latin:"Myristica fragrans",   jp:"ナツメグ",
+    note:"BASE", comps:["MYRISTICIN","SABINENE","α-PINENE"],
+    rt:"3/2", iv:"PERFECT FIFTH",
+    deep:[130,85,45],  lite:[240,190,140], ratio:3/2, oct:.5,
+    R:186, incl:-.14, node0:1.5, period:27500, prec:.000011, e:.08, peri:.9,
+    snd:{pad:.026, sub:true, bells:{octs:[1,2], every:[8200,14000], gain:.018}} },
+];
+const BOT={}; BOTS.forEach(b=>{ b.freq=ROOT*b.ratio*b.oct; BOT[b.id]=b; });
+
+/* 月齢：実際の今夜の月。背景の月が満ち欠けし、満月の夜は全層の鈴がわずかに煌めきを増す */
+const LUNAR=(()=>{
+  const syn=29.530588853;                       // 朔望月
+  const ref=Date.UTC(2000,0,6,18,14);           // 基準新月 2000-01-06 18:14 UTC
+  const age=(((Date.now()-ref)/86400000)%syn+syn)%syn;
+  const p=age/syn;
+  const k=(1-Math.cos(p*Math.PI*2))/2;          // 照度 0=新月 1=満月
+  const names=["NEW MOON","WAXING CRESCENT","FIRST QUARTER","WAXING GIBBOUS",
+               "FULL MOON","WANING GIBBOUS","LAST QUARTER","WANING CRESCENT"];
+  return { age, p, k, name:names[Math.round(p*8)%8], full:k>.97 };
+})();
+
+/* ============================ 2. 画布と透視 ============================ */
+const canvas=document.getElementById("g");
+const ctx=canvas.getContext("2d");
+const bgC=document.createElement("canvas");
+let CW=0, CH=0, U=1, SC=1;
+let twink=[];
+const FOG=[14,19,38];
+const F=1500;
+let camYaw=0, camPitch=.34, ZK=1;
+let cyc=1,syc=0,cpc=1,spc=0;
+function camUpdate(t){
+  camYaw=t*.000062;
+  camPitch=.34+.1*Math.sin(t*.000165);
+  ZK=1+.025*Math.sin(t*.000087); // ごく遅い寄り引き（呼吸する画角）
+  cyc=Math.cos(camYaw); syc=Math.sin(camYaw);
+  cpc=Math.cos(camPitch); spc=Math.sin(camPitch);
+}
+function project(p){
+  const xr=p.x*cyc+p.z*syc, z1=-p.x*syc+p.z*cyc;
+  const yr=p.y*cpc-z1*spc,  zr=p.y*spc+z1*cpc;
+  const s=F/(F-zr)*ZK;
+  return { x:CW/2+xr*s*SC, y:CH*.46-yr*s*SC, s, d:clamp((zr+420)/840,0,1) };
+}
+
+function bakeBg(){
+  bgC.width=CW; bgC.height=CH;
+  const c=bgC.getContext("2d");
+  const g=c.createLinearGradient(0,0,0,CH);
+  g.addColorStop(0,"#04050b"); g.addColorStop(.55,"#060914"); g.addColorStop(1,"#080b18");
+  c.fillStyle=g; c.fillRect(0,0,CW,CH);
+  const rng=makeRng(615);
+  c.globalCompositeOperation="lighter";
+  // 星雲の気配
+  const nebs=[[.28,.36,[60,80,160],.06],[.7,.52,[110,70,160],.045],[.5,.26,[40,90,140],.045]];
+  for(const [nx,ny,col,al] of nebs){
+    const r=Math.max(CW,CH)*.42;
+    const ng=c.createRadialGradient(CW*nx,CH*ny,0,CW*nx,CH*ny,r);
+    ng.addColorStop(0,rgba(col,al)); ng.addColorStop(1,rgba(col,0));
+    c.fillStyle=ng; c.beginPath(); c.arc(CW*nx,CH*ny,r,0,7); c.fill();
+  }
+  // 天の川
+  const ax=-CW*.05, ay=CH*.9, bx=CW*1.05, by=CH*.12;
+  const dxm=bx-ax, dym=by-ay, Lm=Math.hypot(dxm,dym), nx=-dym/Lm, ny=dxm/Lm;
+  for(let i=0;i<8;i++){
+    const tt=rng(), px=ax+dxm*tt, py=ay+dym*tt, off=(rng()-.5)*Math.min(CW,CH)*.09;
+    const r=Math.min(CW,CH)*(.05+rng()*.08);
+    const mg=c.createRadialGradient(px+nx*off,py+ny*off,0,px+nx*off,py+ny*off,r);
+    mg.addColorStop(0,rgba([150,170,230],.04+rng()*.035)); mg.addColorStop(1,rgba([150,170,230],0));
+    c.fillStyle=mg; c.beginPath(); c.arc(px+nx*off,py+ny*off,r,0,7); c.fill();
+  }
+  const nMW=(CW*CH/10500)|0;
+  for(let i=0;i<nMW;i++){
+    const tt=rng(), gauss=(rng()+rng()+rng()-1.5)/1.5;
+    const off=gauss*Math.min(CW,CH)*.08;
+    const x=ax+dxm*tt+nx*off, y=ay+dym*tt+ny*off;
+    if(x<0||x>CW||y<0||y>CH) continue;
+    c.fillStyle=`rgba(235,240,255,${.04+rng()*.16})`;
+    c.beginPath(); c.arc(x,y,(rng()*.8+.2)*U,0,7); c.fill();
+  }
+  // 微星
+  const n=(CW*CH/30000)|0;
+  for(let i=0;i<n;i++){
+    const x=rng()*CW, y=rng()*CH, r=(.25+rng()*1)*U, a=.05+rng()*.22;
+    c.fillStyle=`rgba(235,240,255,${a})`;
+    c.beginPath(); c.arc(x,y,r,0,7); c.fill();
+    if(twink.length<36) twink.push({x,y,r,a,sp:.3+rng()*1.4,ph:rng()*6});
+  }
+  c.globalCompositeOperation="source-over";
+  // 今夜の月：実際の月齢（LUNAR）で満ち欠けする
+  {
+    const mx=CW*.72, my=CH*.15, mr=19*U;
+    const halo=c.createRadialGradient(mx,my,0,mx,my,mr*4.5);
+    halo.addColorStop(0,`rgba(235,238,250,${.10+.12*LUNAR.k})`);
+    halo.addColorStop(1,"rgba(235,238,250,0)");
+    c.globalCompositeOperation="lighter";
+    c.fillStyle=halo; c.beginPath(); c.arc(mx,my,mr*4.5,0,7); c.fill();
+    c.globalCompositeOperation="source-over";
+    c.fillStyle="rgba(232,236,248,.9)";
+    c.beginPath(); c.arc(mx,my,mr,0,7); c.fill();
+    // 影の円盤を月内にクリップしてずらし、欠けを作る
+    c.save();
+    c.beginPath(); c.arc(mx,my,mr,0,7); c.clip();
+    const dx=2*mr*LUNAR.k*(LUNAR.p<.5?-1:1);
+    c.fillStyle="rgba(7,10,20,.97)";
+    c.beginPath(); c.arc(mx+dx,my-mr*.06,mr*1.04,0,7); c.fill();
+    c.restore();
+  }
+  // 照準環（観測儀のレチクル）：中心のごく淡い同心円と十字
+  const cx=CW/2, cy=CH*.46;
+  c.strokeStyle="rgba(205,216,240,.05)"; c.lineWidth=1;
+  for(const r of [Math.min(CW,CH)*.42]){
+    c.beginPath(); c.arc(cx,cy,r,0,7); c.stroke();
+    for(let i=0;i<24;i++){ // 方位目盛
+      const a=i/24*Math.PI*2;
+      const l=(i%6===0)?9*U:4.5*U;
+      c.beginPath();
+      c.moveTo(cx+Math.cos(a)*(r-l),cy+Math.sin(a)*(r-l));
+      c.lineTo(cx+Math.cos(a)*r,cy+Math.sin(a)*r); c.stroke();
+    }
+  }
+  c.strokeStyle="rgba(205,216,240,.04)";
+  c.beginPath(); c.moveTo(cx-16*U,cy); c.lineTo(cx+16*U,cy); c.stroke();
+  c.beginPath(); c.moveTo(cx,cy-16*U); c.lineTo(cx,cy+16*U); c.stroke();
+  // 銀粒
+  const gc2=document.createElement("canvas"); gc2.width=gc2.height=140;
+  const gx=gc2.getContext("2d"); const im=gx.createImageData(140,140);
+  const rng2=makeRng(31337);
+  for(let i=0;i<im.data.length;i+=4){ const v=(rng2()*255)|0;
+    im.data[i]=im.data[i+1]=im.data[i+2]=v; im.data[i+3]=20; }
+  gx.putImageData(im,0,0);
+  c.globalAlpha=.3; c.fillStyle=c.createPattern(gc2,"repeat");
+  c.fillRect(0,0,CW,CH); c.globalAlpha=1;
+  // ビネット
+  const vg=c.createRadialGradient(CW/2,CH*.45,Math.min(CW,CH)*.3,CW/2,CH*.5,Math.max(CW,CH)*.8);
+  vg.addColorStop(0,"rgba(0,0,0,0)"); vg.addColorStop(1,"rgba(0,0,0,.55)");
+  c.fillStyle=vg; c.fillRect(0,0,CW,CH);
+}
+/* 蒸留核のスプライト */
+const coreC=document.createElement("canvas");
+(function(){
+  const S=300; coreC.width=coreC.height=S;
+  const c=coreC.getContext("2d");
+  const g=c.createRadialGradient(S/2,S/2,0,S/2,S/2,S/2);
+  g.addColorStop(0,"rgba(255,250,238,.95)");
+  g.addColorStop(.09,"rgba(255,236,205,.42)");
+  g.addColorStop(.3,"rgba(165,155,215,.13)");
+  g.addColorStop(1,"rgba(80,90,160,0)");
+  c.fillStyle=g; c.fillRect(0,0,S,S);
+})();
+function resize(){
+  const dpr=Math.min(window.devicePixelRatio||1, 1.5); // 解像度上限（発熱対策）
+  CW=canvas.width=Math.floor(innerWidth*dpr);
+  CH=canvas.height=Math.floor(innerHeight*dpr);
+  canvas.style.width=innerWidth+"px"; canvas.style.height=innerHeight+"px";
+  U=Math.min(CW,CH)/1000;
+  SC=Math.min(CW,CH)/980;
+  twink=[];
+  bakeBg();
+  composeFrame(lastT||0);
+}
+addEventListener("resize",resize);
+canvas.addEventListener("contextlost",e=>e.preventDefault());
+canvas.addEventListener("contextrestored",()=>{ twink=[]; bakeBg(); composeFrame(lastT||0); });
+
+/* ============================ 3. 渾天儀：香りの軌道環 ============================ */
+/* 各ボタニカル＝傾斜・半径・周期・歳差の異なる軌道環。
+   灯すと環がせり出し、粒が巡り、鈴が鳴る瞬間に環の星が光る */
+const rings={};   // id -> {bot,k(0..1),dir,particles:[...]}
+const flashes=[]; // 鈴と同期する閃光 {bot,phase,born}
+const conjs=[], conjCool={}; // 合：主星同士の出会い
+let lastBellT=-1e9;          // 鈴が鳴るたび蒸留核が微かに明滅する
+
+/* 彗星：観測中、ごくまれに視野を横切る訪問者（観測記録に残る） */
+let comet=null, nextCometAt=30000;
+function updateComet(t){
+  if(!comet && Object.keys(rings).length && t>nextCometAt){
+    const a=Math.random()*Math.PI*2, b2=(Math.random()-.5)*1.6;
+    const p0={x:Math.cos(a)*Math.cos(b2)*620, y:Math.sin(b2)*620, z:Math.sin(a)*Math.cos(b2)*620};
+    const p1={x:-p0.x+(Math.random()-.5)*220, y:-p0.y+(Math.random()-.5)*220, z:-p0.z+(Math.random()-.5)*220};
+    const c={x:(Math.random()-.5)*130, y:(Math.random()-.5)*130, z:(Math.random()-.5)*130};
+    comet={p0,p1,c,born:t,dur:6500,trail:[]};
+    addLog("TRANSIENT ─ COMET CROSSING");
+  }
+  if(comet){
+    const k=(t-comet.born)/comet.dur;
+    if(k>=1){ comet=null; nextCometAt=t+40000+Math.random()*50000; return; }
+    const u=1-k; // 核の近くを掠める二次ベジェの航跡
+    const p={ x:u*u*comet.p0.x+2*u*k*comet.c.x+k*k*comet.p1.x,
+              y:u*u*comet.p0.y+2*u*k*comet.c.y+k*k*comet.p1.y,
+              z:u*u*comet.p0.z+2*u*k*comet.c.z+k*k*comet.p1.z };
+    comet.trail.push(p);
+    if(comet.trail.length>16) comet.trail.shift();
+  }
+}
+function drawComet(){
+  if(!comet||comet.trail.length<2) return;
+  const tr=comet.trail;
+  ctx.globalCompositeOperation="lighter";
+  for(let i=1;i<tr.length;i++){
+    const q1=project(tr[i-1]), q2=project(tr[i]);
+    ctx.strokeStyle=rgba([200,220,255],.5*i/tr.length);
+    ctx.lineWidth=Math.max(.4,1.1*U*q2.s*i/tr.length);
+    ctx.beginPath(); ctx.moveTo(q1.x,q1.y); ctx.lineTo(q2.x,q2.y); ctx.stroke();
+  }
+  const h=project(tr[tr.length-1]);
+  ctx.fillStyle="rgba(255,255,255,.85)";
+  ctx.beginPath(); ctx.arc(h.x,h.y,1.6*U*h.s,0,7); ctx.fill();
+  ctx.globalCompositeOperation="source-over";
+}
+function ringBasis(bot,t){
+  const node=bot.node0+t*bot.prec; // ゆっくりとした歳差（rad/ms）
+  const incl=bot.incl+.07*Math.sin(t*.000021+bot.node0*3); // 章動：傾き自体がゆっくり揺れる
+  const ci=Math.cos(incl), si=Math.sin(incl);
+  const cn=Math.cos(node), sn=Math.sin(node);
+  return {
+    e1:{x:cn, y:0, z:sn},
+    e2:{x:-sn*ci, y:si, z:cn*ci},
+  };
+}
+function ringPoint(bot,B,a,r){
+  const re=r*(1-(bot.e||0)*Math.cos(a-(bot.peri||0))); // 楕円軌道（近点で締まり、遠点で膨らむ）
+  return { x:(B.e1.x*Math.cos(a)+B.e2.x*Math.sin(a))*re,
+           y:(B.e1.y*Math.cos(a)+B.e2.y*Math.sin(a))*re,
+           z:(B.e1.z*Math.cos(a)+B.e2.z*Math.sin(a))*re };
+}
+function activateRing(bot){
+  if(rings[bot.id]){ rings[bot.id].dir=1; return; }
+  const rng=makeRng((Math.random()*1e9)>>>0);
+  const N=Math.min(innerWidth,innerHeight)<700?26:38;
+  const parts=[];
+  for(let i=0;i<N;i++) parts.push({ off:i/N*Math.PI*2+(rng()-.5)*.1,
+    wob:rng()*6, sz:.7+rng()*.9, br:rng() });
+  rings[bot.id]={bot, k:0, dir:1, parts};
+}
+function deactivateRing(bot){ if(rings[bot.id]) rings[bot.id].dir=-1; }
+
+/* 三次元の円環をへ8弧に分けて描く（奥行きで濃淡・sweep=出現の弧） */
+function strokeCircle3D(e1,e2,R,col,baseAlpha,lw,sweep){
+  const SEG=8, PTS=8;
+  const A=(sweep===undefined?1:sweep)*Math.PI*2;
+  for(let sgi=0;sgi<SEG;sgi++){
+    const a0=sgi/SEG*Math.PI*2;
+    if(a0>=A) break;
+    const a1=Math.min((sgi+1)/SEG*Math.PI*2, A);
+    let mid=null;
+    ctx.beginPath();
+    for(let i=0;i<=PTS;i++){
+      const a=a0+(a1-a0)*i/PTS;
+      const q=project({x:(e1.x*Math.cos(a)+e2.x*Math.sin(a))*R,
+                       y:(e1.y*Math.cos(a)+e2.y*Math.sin(a))*R,
+                       z:(e1.z*Math.cos(a)+e2.z*Math.sin(a))*R});
+      if(i===0) ctx.moveTo(q.x,q.y); else ctx.lineTo(q.x,q.y);
+      if(i===(PTS>>1)) mid=q;
+    }
+    const shade=.3+.7*mid.d;
+    ctx.strokeStyle=rgba(lerpC(FOG,col,.5+.5*mid.d),baseAlpha*shade);
+    ctx.lineWidth=Math.max(.4,lw*mid.s);
+    ctx.stroke();
+  }
+}
+function rotY(v,c,s){ return {x:v.x*c+v.z*s, y:v.y, z:-v.x*s+v.z*c}; }
+/* 渾天儀の骨格：赤道環・二つの子午環・極軸。ゆっくりと器ごと回る */
+function drawCage(t){
+  const w=t*.0000042, c=Math.cos(w), s=Math.sin(w);
+  const RC=358;
+  const X=rotY({x:1,y:0,z:0},c,s), Z=rotY({x:0,y:0,z:1},c,s), Y={x:0,y:1,z:0};
+  strokeCircle3D(X,Z,RC,[150,165,205],.09,.8*U);
+  strokeCircle3D(X,Y,RC,[150,165,205],.055,.7*U);
+  strokeCircle3D(Z,Y,RC,[150,165,205],.055,.7*U);
+  const p1=project({x:0,y:RC*1.12,z:0}), p2=project({x:0,y:-RC*1.12,z:0});
+  ctx.strokeStyle="rgba(205,216,240,.1)"; ctx.lineWidth=.7*U;
+  ctx.beginPath(); ctx.moveTo(p1.x,p1.y); ctx.lineTo(p2.x,p2.y); ctx.stroke();
+  for(const p of [p1,p2]){ // 軸端の飾り珠
+    ctx.fillStyle="rgba(233,212,163,.4)";
+    ctx.beginPath(); ctx.arc(p.x,p.y,1.6*U*p.s,0,7); ctx.fill();
+  }
+}
+function drawObservatory(t){
+  ctx.globalCompositeOperation="lighter";
+  const activeN=Object.values(rings).filter(r=>r.dir>0).length;
+  drawCage(t);
+  // 蒸留核：鈴が鳴るたび、微かに明滅する
+  {
+    const q=project({x:0,y:0,z:0});
+    const breath=1+.05*Math.sin(t*.00074);
+    const flick=Math.max(0,.16*Math.exp(-(t-lastBellT)/260));
+    const size=(170+36*Math.min(5,activeN))*SC*q.s*breath;
+    ctx.globalAlpha=clamp(.3+.1*Math.min(4,activeN)+flick,0,1);
+    ctx.drawImage(coreC,q.x-size/2,q.y-size/2,size,size);
+    ctx.globalAlpha=1;
+    // 蒸留冠：層が三つ以上灯ると、核のまわりに逆回りの光弧が立ちのぼる
+    if(activeN>=3){
+      for(let i=0;i<5;i++){
+        const rr=(40+i*8)*SC*q.s;
+        const w0=t*.00045*(i%2?1:-1)+i*1.7;
+        const span=.8+.5*Math.sin(t*.0006+i*2.1);
+        ctx.strokeStyle=rgba([240,222,180],.10+.03*Math.sin(t*.001+i));
+        ctx.lineWidth=.9*U;
+        ctx.beginPath(); ctx.arc(q.x,q.y,rr,w0,w0+span); ctx.stroke();
+      }
+    }
+  }
+  const prims=[]; // 各環の主星（合の判定に使う）
+  for(const id in rings){
+    const Rg=rings[id], bot=Rg.bot;
+    Rg.k+=Rg.dir*(16/1300); // 約1.3秒で出入り（tick30fps基準）
+    if(Rg.k<=0){ delete rings[id]; continue; }
+    Rg.k=clamp(Rg.k,0,1);
+    const k=ease(Rg.k);
+    const sweep=k; // 出現はコンパスが円を描くように、弧が伸びてゆく
+    const B=ringBasis(bot,t);
+    const r=bot.R;
+    // 三重の環体：主帯・外の細い副帯・内の点線環
+    strokeCircle3D(B.e1,B.e2,r,bot.deep,.42*k,1.05*U,sweep);
+    strokeCircle3D(B.e1,B.e2,r*1.05,bot.deep,.16*k,.55*U,sweep);
+    // 逆引きの明滅：指名された成分を含む環が一斉にまたたく
+    if(trace.until>t && trace.bots.includes(id)){
+      const blink=.5+.5*Math.sin((t-trace.start)*.014);
+      strokeCircle3D(B.e1,B.e2,r,bot.lite,.55*blink*k,1.7*U,sweep);
+    }
+    for(let i=0;i<60;i++){
+      const a=i/60*Math.PI*2;
+      if(a>sweep*Math.PI*2) break;
+      const q=project(ringPoint(bot,B,a,r*.948));
+      ctx.fillStyle=rgba(lerpC(FOG,bot.deep,.5+.5*q.d),.16*k*(.3+.7*q.d));
+      ctx.beginPath(); ctx.arc(q.x,q.y,.55*U*q.s,0,7); ctx.fill();
+    }
+    // 観測儀の刻み（30度ごと）
+    for(let i=0;i<12;i++){
+      const a=i/12*Math.PI*2;
+      if(a>sweep*Math.PI*2) continue;
+      const q1=project(ringPoint(bot,B,a,r*.985));
+      const q2=project(ringPoint(bot,B,a,r*1.015));
+      ctx.strokeStyle=rgba(bot.lite,.2*(.3+.7*q1.d)*k);
+      ctx.lineWidth=.6*U;
+      ctx.beginPath(); ctx.moveTo(q1.x,q1.y); ctx.lineTo(q2.x,q2.y); ctx.stroke();
+    }
+    // 巡る粒：香りの分子のように環を流れる（手前は前ボケ＝被写界深度）
+    const phase=t/bot.period*Math.PI*2;
+    for(const P of Rg.parts){
+      const a=phase+P.off;
+      const am=((a%(Math.PI*2))+Math.PI*2)%(Math.PI*2);
+      if(am>sweep*Math.PI*2) continue;
+      const wob=1+.012*Math.sin(t*.0011+P.wob);
+      const q=project(ringPoint(bot,B,a,r*wob));
+      const dk=.3+.7*q.d;
+      // 密度波：環を伝う明るさのうねり（土星の環のように粒が群れて流れる）
+      const wave=.72+.28*Math.sin(a*3 - t/bot.period*12.57 + bot.node0);
+      const tw=(.6+.4*Math.sin(t*.002+P.wob*2))*wave;
+      ctx.fillStyle=rgba(lerpC(FOG,bot.lite,.5+.5*q.d),(.32+.38*P.br)*dk*k*tw);
+      ctx.beginPath(); ctx.arc(q.x,q.y,P.sz*1.4*U*q.s,0,7); ctx.fill();
+      if(q.d>.9){
+        ctx.fillStyle=rgba(bot.lite,.06*k);
+        ctx.beginPath(); ctx.arc(q.x,q.y,P.sz*4.2*U*q.s,0,7); ctx.fill();
+      }
+      if(P.br>.82){ // 明るい粒には白の芯
+        ctx.fillStyle=rgba([255,255,255],.5*dk*k*tw);
+        ctx.beginPath(); ctx.arc(q.x,q.y,.55*U*q.s,0,7); ctx.fill();
+      }
+    }
+    // 主星：環を巡る一等星と、その尾
+    const ap=phase+bot.node0;
+    const apm=((ap%(Math.PI*2))+Math.PI*2)%(Math.PI*2);
+    if(apm<=sweep*Math.PI*2){
+      const pos=ringPoint(bot,B,ap,r);
+      const q=project(pos);
+      ctx.strokeStyle=rgba(bot.lite,.4*k*(.3+.7*q.d));
+      ctx.lineWidth=1.3*U*q.s; ctx.lineCap="round";
+      ctx.beginPath();
+      for(let i=0;i<=6;i++){
+        const aa=ap-.5*(1-i/6);
+        const qq=project(ringPoint(bot,B,aa,r));
+        if(i===0) ctx.moveTo(qq.x,qq.y); else ctx.lineTo(qq.x,qq.y);
+      }
+      ctx.stroke();
+      ctx.fillStyle=rgba(bot.lite,.5*k);
+      ctx.beginPath(); ctx.arc(q.x,q.y,3.2*U*q.s,0,7); ctx.fill();
+      ctx.fillStyle=rgba([255,255,255],.9*k);
+      ctx.beginPath(); ctx.arc(q.x,q.y,1.3*U*q.s,0,7); ctx.fill();
+      if(Rg.k>.8) prims.push({bot,pos});
+    }
+  }
+  // 合：二つの主星が天球上で出会うとき、金の糸が結ばれ、二香の和音が鳴る
+  for(let i=0;i<prims.length;i++)for(let j=i+1;j<prims.length;j++){
+    const Pa=prims[i], Pb=prims[j];
+    const la=Math.hypot(Pa.pos.x,Pa.pos.y,Pa.pos.z), lb=Math.hypot(Pb.pos.x,Pb.pos.y,Pb.pos.z);
+    const dot=(Pa.pos.x*Pb.pos.x+Pa.pos.y*Pb.pos.y+Pa.pos.z*Pb.pos.z)/(la*lb||1);
+    if(dot>Math.cos(.14)){
+      const key=Pa.bot.id+"|"+Pb.bot.id;
+      if(!(conjCool[key]>t)){
+        conjCool[key]=t+16000;
+        conjs.push({a:Pa.bot,b:Pb.bot,born:t});
+        bell(Pa.bot.freq*2,.022);
+        setTimeout(()=>bell(Pb.bot.freq*2,.022),90);
+        addLog(`CONJUNCTION SP.${Pa.bot.no} × SP.${Pb.bot.no}`);
+      }
+    }
+  }
+  for(let i=conjs.length-1;i>=0;i--){
+    const Cj=conjs[i];
+    const age=t-Cj.born;
+    if(age>2200 || !rings[Cj.a.id] || !rings[Cj.b.id]){ conjs.splice(i,1); continue; }
+    const kk=1-age/2200;
+    const Ba=ringBasis(Cj.a,t), Bb=ringBasis(Cj.b,t);
+    const qa=project(ringPoint(Cj.a,Ba,t/Cj.a.period*Math.PI*2+Cj.a.node0,Cj.a.R));
+    const qb=project(ringPoint(Cj.b,Bb,t/Cj.b.period*Math.PI*2+Cj.b.node0,Cj.b.R));
+    ctx.strokeStyle=rgba([233,212,163],.5*kk);
+    ctx.lineWidth=.8*U;
+    ctx.beginPath(); ctx.moveTo(qa.x,qa.y); ctx.lineTo(qb.x,qb.y); ctx.stroke();
+    ctx.fillStyle=rgba([255,248,225],.6*kk);
+    ctx.beginPath(); ctx.arc((qa.x+qb.x)/2,(qa.y+qb.y)/2,1.6*U,0,7); ctx.fill();
+  }
+  // 鈴の閃光：音が鳴った座標で、軌道の星がまたたく
+  for(let i=flashes.length-1;i>=0;i--){
+    const Fls=flashes[i];
+    const age=t-Fls.born;
+    if(age>900 || !rings[Fls.bot.id]){ flashes.splice(i,1); continue; }
+    const k=age/900;
+    const B=ringBasis(Fls.bot,t);
+    const Rg=rings[Fls.bot.id];
+    const r=Fls.bot.R*(.62+.38*ease(clamp(Rg.k,0,1)));
+    const a=t/Fls.bot.period*Math.PI*2+Fls.phase;
+    const q=project(ringPoint(Fls.bot,B,a,r));
+    ctx.strokeStyle=rgba(Fls.bot.lite,(1-k)*.6);
+    ctx.lineWidth=.9*U*q.s;
+    ctx.beginPath(); ctx.arc(q.x,q.y,(2+14*k)*U*q.s,0,7); ctx.stroke();
+    ctx.fillStyle=rgba([255,255,255],(1-k)*.9);
+    ctx.beginPath(); ctx.arc(q.x,q.y,1.5*U*q.s,0,7); ctx.fill();
+  }
+  ctx.globalCompositeOperation="source-over";
+}
+
+/* ============================ 4. 音：層になるアンビエント ============================ */
+/* 標本札ひとつ＝ひとつの層。全層が純正律の同じ根音の上に立つので、
+   どの組み合わせで重ねても必ず調和し、重ねるほど壮大な和音になる */
+const audio={ctx:null,master:null,echo:null,on:true,layers:{},_susT:null};
+function makeImpulse(ac,sec){
+  const len=(ac.sampleRate*sec)|0, buf=ac.createBuffer(2,len,ac.sampleRate);
+  for(let ch=0;ch<2;ch++){
+    const d=buf.getChannelData(ch); let lp=0;
+    for(let i=0;i<len;i++){ const t=i/len;
+      lp+=(0.5-0.42*t)*((Math.random()*2-1)-lp);
+      d[i]=lp*Math.pow(1-t,2.5)*1.7; }
+  }
+  return buf;
+}
+function initAudio(){
+  if(audio.ctx) return;
+  const AC=window.AudioContext||window.webkitAudioContext;
+  const ac=audio.ctx=new AC();
+  audio.master=ac.createGain(); audio.master.gain.value=0;
+  const tone=ac.createBiquadFilter(); tone.type="lowpass"; tone.frequency.value=1750; tone.Q.value=.35;
+  const tl=ac.createOscillator(), tg=ac.createGain();
+  tl.frequency.value=1/49; tg.gain.value=620;
+  tl.connect(tg).connect(tone.frequency); tl.start();
+  const conv=ac.createConvolver(); conv.buffer=makeImpulse(ac,4.6);
+  const dry=ac.createGain(); dry.gain.value=.54;
+  const wet=ac.createGain(); wet.gain.value=.52;
+  const comp=ac.createDynamicsCompressor();
+  comp.threshold.value=-19; comp.knee.value=26; comp.ratio.value=3.2;
+  audio.master.connect(tone);
+  tone.connect(dry).connect(comp);
+  tone.connect(conv).connect(wet).connect(comp);
+  comp.connect(ac.destination);
+  const echo=audio.echo=ac.createDelay(2); echo.delayTime.value=.44;
+  const fb=ac.createGain(); fb.gain.value=.33;
+  const ew=ac.createGain(); ew.gain.value=.4;
+  echo.connect(fb).connect(echo); echo.connect(ew).connect(audio.master);
+}
+function unlockAudio(){
+  initAudio();
+  if(audio.ctx.state==="suspended") audio.ctx.resume();
+  if(audio.on) audio.master.gain.setTargetAtTime(.55,audio.ctx.currentTime,1.0);
+}
+function bell(freq,gain){
+  if(!audio.ctx||audio.ctx.state!=="running") return;
+  lastBellT=lastT; // 蒸留核の明滅と同期
+  if(LUNAR.full) gain*=1.2; // 満月の夜、鈴はわずかに煌めきを増す
+  const ac=audio.ctx, now=ac.currentTime, vel=.6+Math.random()*.8;
+  const g=ac.createGain();
+  g.gain.setValueAtTime(0,now);
+  g.gain.linearRampToValueAtTime(gain*vel,now+.02);
+  g.gain.exponentialRampToValueAtTime(.0001,now+2.8);
+  let out=g;
+  if(ac.createStereoPanner){
+    const pan=ac.createStereoPanner();
+    pan.pan.value=(Math.random()*2-1)*.8; g.connect(pan); out=pan;
+  }
+  out.connect(audio.master);
+  if(audio.echo) out.connect(audio.echo);
+  // 鈴も整数次倍音（1·2·3·5次＝純正比）を主体に。
+  // ごく薄い2.76次だけが鐘の影として残る（響きを金属にする最少量）
+  for(const [m,w] of [[1,1],[2,.36],[3,.18],[5,.06],[2.76,.05]]){
+    const o=ac.createOscillator(); o.type="sine";
+    o.frequency.value=freq*m; o.detune.value=(Math.random()-.5)*4;
+    const pg=ac.createGain(); pg.gain.value=w;
+    o.connect(pg).connect(g); o.start(now); o.stop(now+3);
+  }
+}
+/* 層を灯す：パッド（デチューン束＋五度）＋固有の彩り（sub/noise/trem）＋鈴の言葉 */
+function layerOn(bot){
+  unlockAudio();
+  const ac=audio.ctx;
+  if(audio.layers[bot.id]){ // 消灯中なら再点灯
+    const L=audio.layers[bot.id];
+    clearTimeout(L.stopT); L.stopT=null;
+    L.g.gain.setTargetAtTime(L.level, ac.currentTime, 2.2);
+    scheduleBells(bot);
+    return;
+  }
+  const snd=bot.snd, now=ac.currentTime;
+  const g=ac.createGain(); g.gain.value=0;
+  const oscs=[];
+  /* 倍音列パッド：音色そのものを自然倍音（整数次 1f〜5f、約1/n減衰）で組む。
+     整数次倍音は根音に対して 2/1・3/1・4/1・5/1 の単純整数比＝音色のレベルでも純正。
+     第3倍音=オクターブ＋完全五度、第5倍音=2オクターブ＋純正長三度 */
+  for(const det of [-4,3]){ // 基音だけ僅かにデチューンした2本（合唱のゆらぎ）
+    const o=ac.createOscillator(); o.type="sine";
+    o.frequency.value=bot.freq; o.detune.value=det+(Math.random()-.5)*1.5;
+    const pg=ac.createGain(); pg.gain.value=.5;
+    o.connect(pg).connect(g); o.start(); oscs.push(o);
+  }
+  const hGains={};
+  for(const [n,w] of [[2,.4],[3,.24],[4,.13],[5,.08]]){
+    const o=ac.createOscillator(); o.type="sine"; o.frequency.value=bot.freq*n;
+    const pg=ac.createGain(); pg.gain.value=w;
+    o.connect(pg).connect(g); o.start(); oscs.push(o);
+    hGains[n]=pg;
+  }
+  // 第2倍音（オクターブ）の艶：約37秒の周期で満ち引きし、長く聴いても表情が止まらない
+  const l8=ac.createOscillator(), lg8=ac.createGain();
+  l8.frequency.value=1/37; lg8.gain.value=.16;
+  l8.connect(lg8).connect(hGains[2].gain); l8.start(); oscs.push(l8);
+  if(snd.sub){ // 根の脈：体にじんわり届く低いオクターブ
+    const os=ac.createOscillator(); os.type="sine"; os.frequency.value=bot.freq/2;
+    const gs=ac.createGain(); gs.gain.value=.5;
+    os.connect(gs).connect(g); os.start(); oscs.push(os);
+  }
+  if(snd.noise){ // 気流：息のような帯域ノイズ
+    const nb=ac.createBuffer(1,ac.sampleRate*2,ac.sampleRate);
+    const d=nb.getChannelData(0);
+    for(let i=0;i<d.length;i++) d[i]=Math.random()*2-1;
+    const src=ac.createBufferSource(); src.buffer=nb; src.loop=true;
+    const bp=ac.createBiquadFilter(); bp.type="bandpass";
+    bp.frequency.value=bot.freq*6; bp.Q.value=9;
+    const ng=ac.createGain(); ng.gain.value=.18;
+    const nl=ac.createOscillator(), ngl=ac.createGain();
+    nl.frequency.value=.07; ngl.gain.value=.1;
+    nl.connect(ngl).connect(ng.gain); nl.start();
+    src.connect(bp).connect(ng).connect(g);
+    src.start(); oscs.push(src,nl);
+  }
+  const tr=snd.trem||[ .05+Math.random()*.04, .005 ];
+  const lfo=ac.createOscillator(), lg=ac.createGain();
+  lfo.frequency.value=tr[0]; lg.gain.value=tr[1];
+  lfo.connect(lg).connect(g.gain); lfo.start(); oscs.push(lfo);
+  const pan=ac.createStereoPanner?ac.createStereoPanner():null;
+  if(pan){ pan.pan.value=(Math.random()*2-1)*.7; g.connect(pan).connect(audio.master); }
+  else g.connect(audio.master);
+  g.gain.setTargetAtTime(snd.pad, now, 2.4); // じんわり満ちる
+  audio.layers[bot.id]={g,oscs,level:snd.pad,bellT:null,stopT:null};
+  scheduleBells(bot);
+}
+function layerOff(bot){
+  const L=audio.layers[bot.id];
+  if(!L||!audio.ctx) return;
+  clearTimeout(L.bellT); L.bellT=null;
+  L.g.gain.setTargetAtTime(0, audio.ctx.currentTime, 1.1);
+  L.stopT=setTimeout(()=>{ // 静まったら振動体ごと止めてCPUを返す
+    try{ L.oscs.forEach(o=>o.stop()); }catch(e){}
+    delete audio.layers[bot.id];
+  },5000);
+}
+/* 鈴の言葉：層ごとに人間的なゆらぎの間で鳴り、映像の軌道に閃光を残す */
+function scheduleBells(bot){
+  const L=audio.layers[bot.id];
+  if(!L) return;
+  const [mn,mx]=bot.snd.bells.every;
+  L.bellT=setTimeout(()=>{
+    const L2=audio.layers[bot.id];
+    if(!L2||L2.stopT) return;
+    scheduleBells(bot);
+    if(!audio.on||!audio.ctx||audio.ctx.state!=="running") return;
+    const octs=bot.snd.bells.octs;
+    const fq=bot.freq*octs[(Math.random()*octs.length)|0];
+    bell(fq, bot.snd.bells.gain);
+    flashes.push({bot, phase:Math.random()*Math.PI*2, born:lastT||performance.now()});
+    addLog(`SP.${bot.no} CHIME ${fq.toFixed(1)}Hz`);
+  }, mn+Math.random()*(mx-mn));
+}
+
+/* ============================ 5. 標本札と印 ============================ */
+const state={ active:{} };
+const hintEl=document.getElementById("hint");
+const wrap=document.getElementById("specimens");
+BOTS.forEach(b=>{
+  const el=document.createElement("button");
+  el.className="spec"; el.dataset.id=b.id;
+  el.style.setProperty("--c",`rgb(${b.lite.join(",")})`);
+  el.title=`${b.jp} — ${(b.freq).toFixed(1)} Hz`;
+  const noteS=b.note==="MIDDLE"?"MID":b.note;
+  el.innerHTML=`<span class="no">SP.${b.no} · ${noteS}</span>`+
+               `<span class="latin">${b.latin}</span>`+
+               `<span class="jp">${b.jp}</span>`+
+               `<span class="hz">${b.rt} ─ ${b.freq.toFixed(1)} Hz</span>`+
+               `<i class="lamp"></i>`;
+  el.addEventListener("click",()=>{
+    const on=!state.active[b.id];
+    toggleBot(b,on);
+    if(on){ bell(b.freq*2,.04);
+      dossierIdx=BOTS.filter(x=>state.active[x.id]).findIndex(x=>x.id===b.id); // 灯した標本を調書に
+      updateDossier(); }
+    hintEl.classList.add("off");
+  });
+  wrap.appendChild(el);
+});
+/* 処方箋：実在のジン様式に倣った配合の譜。押すと層が儀式のように順に灯る */
+const FORMULAS=[
+  { id:"london", name:"LONDON DRY",     jp:"ロンドン・ドライ ─ 古典の骨格",
+    bots:["juniper","coriander","angelica","lemon","orris"] },
+  { id:"japan",  name:"JAPANESE CRAFT", jp:"ジャパニーズ ─ 柚子と山椒の静けさ",
+    bots:["juniper","yuzu","sansho","cardamom"] },
+  { id:"spice",  name:"SPICE ROUTE",    jp:"スパイス航路 ─ 東方の熱",
+    bots:["juniper","cardamom","cassia","nutmeg","paradise","cubeb"] },
+  { id:"floral", name:"FLORAL",         jp:"花譜 ─ 草原の黄昏",
+    bots:["juniper","lavender","chamomile","orris","coriander"] },
+  { id:"citrus", name:"CITRUS GROVE",   jp:"柑橘園 ─ 陽のあたる果樹",
+    bots:["juniper","lemon","orange","yuzu","licorice"] },
+];
+const flWrap=document.getElementById("formulary");
+FORMULAS.forEach(F=>{
+  const el=document.createElement("button");
+  el.className="formula"; el.dataset.id=F.id;
+  el.title=`${F.jp}（${F.bots.length}層）`;
+  el.textContent=F.name;
+  el.addEventListener("click",()=>applyFormula(F));
+  flWrap.appendChild(el);
+});
+function applyFormula(F){
+  unlockAudio();
+  hintEl.classList.add("off");
+  // 処方にない層は静かに退き、処方の層がひとつずつ灯ってゆく
+  for(const b of BOTS)
+    if(state.active[b.id] && !F.bots.includes(b.id)) toggleBot(b,false,{quiet:true});
+  let i=0;
+  for(const id of F.bots){
+    if(state.active[id]) continue;
+    const b=BOT[id];
+    setTimeout(()=>{ toggleBot(b,true,{quiet:true}); bell(b.freq*2,.035); }, i*280);
+    i++;
+  }
+  addLog(`FORMULA ─ ${F.name}（${String(F.bots.length).padStart(2,"0")} LAYERS）`);
+}
+/* いまの配合が処方と一致していれば、その譜が金に灯る */
+function updateFormulary(){
+  const act=BOTS.filter(b=>state.active[b.id]).map(b=>b.id).sort().join(",");
+  document.querySelectorAll(".formula").forEach(el=>{
+    const F=FORMULAS.find(f=>f.id===el.dataset.id);
+    el.classList.toggle("on", act!=="" && act===F.bots.slice().sort().join(","));
+  });
+}
+
+/* 層の点灯・消灯の共通経路（札クリック・自動観測・処方箋・URL復元が同じ道を通る） */
+function toggleBot(b,on,opts){
+  opts=opts||{};
+  state.active[b.id]=on;
+  const el=document.querySelector(`.spec[data-id="${b.id}"]`);
+  if(el) el.classList.toggle("on",on);
+  if(on){ activateRing(b); layerOn(b); }
+  else  { deactivateRing(b); layerOff(b); }
+  if(!opts.quiet)
+    addLog(`${opts.auto?"AUTO ─ ":""}SP.${b.no} ${b.latin.split(" ")[0].toUpperCase()} ─ LAYER ${on?"ON":"OFF"}`);
+  syncHash(); updateHud(); updateDossier(); updateCindex(); updateFormulary();
+}
+/* レシピのURL共有：点灯状態がそのままURLに刻まれ、リンクを開けば同じ配合が再現される */
+function syncHash(){
+  try{
+    const ids=BOTS.filter(b=>state.active[b.id]).map(b=>b.id).join(".");
+    history.replaceState(null,"", ids?"#r="+ids:location.pathname);
+  }catch(e){}
+}
+/* 自動観測：層がひとりでに移ろう（3〜6層を保ちながら、ゆっくり配合が巡る） */
+const auto={on:false,t:null};
+function autoStep(){
+  if(!auto.on) return;
+  auto.t=setTimeout(autoStep, 12000+Math.random()*18000);
+  const act=BOTS.filter(b=>state.active[b.id]);
+  let b,on;
+  if(act.length<3){ const off=BOTS.filter(x=>!state.active[x.id]); b=off[(Math.random()*off.length)|0]; on=true; }
+  else if(act.length>6){ b=act[(Math.random()*act.length)|0]; on=false; }
+  else {
+    on=Math.random()<.55;
+    const pool=on?BOTS.filter(x=>!state.active[x.id]):act;
+    b=pool[(Math.random()*pool.length)|0];
+  }
+  if(b) toggleBot(b,on,{auto:true});
+}
+document.getElementById("auto").addEventListener("click",function(){
+  auto.on=!auto.on;
+  this.classList.toggle("on",auto.on);
+  unlockAudio();
+  hintEl.classList.add("off");
+  addLog(auto.on?"AUTO OBSERVATION ─ ENGAGED":"AUTO OBSERVATION ─ DISENGAGED");
+  clearTimeout(auto.t);
+  if(auto.on) auto.t=setTimeout(autoStep,800);
+});
+document.getElementById("mute").addEventListener("click",function(){
+  audio.on=!audio.on;
+  this.textContent=audio.on?"響":"黙";
+  if(!audio.ctx) return;
+  clearTimeout(audio._susT);
+  if(audio.on){
+    if(audio.ctx.state==="suspended") audio.ctx.resume();
+    audio.master.gain.setTargetAtTime(.55,audio.ctx.currentTime,.8);
+  } else {
+    audio.master.gain.setTargetAtTime(0,audio.ctx.currentTime,.3);
+    audio._susT=setTimeout(()=>{ if(!audio.on&&audio.ctx) audio.ctx.suspend(); },1500);
+  }
+});
+document.getElementById("dawn").addEventListener("click",()=>{
+  for(const b of BOTS) if(state.active[b.id]) toggleBot(b,false,{quiet:true});
+  addLog("ALL LAYERS RELEASED");
+});
+document.getElementById("save").addEventListener("click",()=>{
+  composeFrame(lastT||0);
+  const a=document.createElement("a");
+  a.download="observatorium_"+new Date().toISOString().slice(0,19).replace(/[:T-]/g,"")+".png";
+  a.href=canvas.toDataURL("image/png"); a.click();
+});
+document.addEventListener("visibilitychange",()=>{
+  if(!audio.ctx) return;
+  if(document.hidden) audio.ctx.suspend();
+  else if(audio.on) audio.ctx.resume();
+});
+
+/* 観測記録：流れるライブログ（最新5行） */
+const logEl=document.getElementById("log");
+const logLines=[];
+function addLog(msg){
+  const d=new Date();
+  const ts=`${String(d.getHours()).padStart(2,"0")}:${String(d.getMinutes()).padStart(2,"0")}:${String(d.getSeconds()).padStart(2,"0")}`;
+  logLines.push(`${ts}  ${msg}`);
+  if(logLines.length>5) logLines.shift();
+  logEl.textContent=logLines.join("\n");
+}
+
+/* 観測データの読み（計器） */
+const hudL=document.getElementById("hudL"), hudR=document.getElementById("hudR");
+function updateHud(){
+  const act=BOTS.filter(b=>state.active[b.id]);
+  const az=((camYaw*180/Math.PI)%360+360)%360;
+  hudL.innerHTML=
+    `AZIMUTH <b>${az.toFixed(1).padStart(5,"0")}°</b>\n`+
+    `ESSENCES <b>${String(act.length).padStart(2,"0")}</b> / ${BOTS.length}\n`+
+    `ROOT A2 <b>110.0 Hz</b> ─ 5-LIMIT JUST INTONATION\n`+
+    `TIMBRE HARMONIC SERIES <b>1·2·3·4·5</b>\n`+
+    `LUNAR ${LUNAR.name} <b>${Math.round(LUNAR.k*100)}%</b>`+
+    (LUNAR.full?" ─ BELLS BRIGHTENED":"");
+  const shown=act.slice(0,10);
+  hudR.innerHTML=act.length
+    ? shown.map(b=>`SP.${b.no} ${b.latin.split(" ")[0].toUpperCase()} ${b.rt} <b>${b.freq.toFixed(1)}Hz</b> ${b.note[0]}`).join("\n")
+      +(act.length>10?`\n… +${act.length-10}`:"")
+    : `STANDBY ─ AWAITING SPECIMEN`;
+}
+setInterval(updateHud,700);
+
+/* 成分索引：点灯中の標本に含まれる全香気成分を集計し、
+   複数の標本が共有する成分（香りの糸）を金で照らす */
+const cindexEl=document.getElementById("cindex");
+function updateCindex(){
+  const act=BOTS.filter(b=>state.active[b.id]);
+  if(!act.length){ cindexEl.innerHTML=""; return; }
+  const map={};
+  for(const b of act) for(const c of b.comps) (map[c]=map[c]||[]).push(b.no);
+  const rows=Object.entries(map)
+    .sort((x,y)=> y[1].length-x[1].length || (x[0]<y[0]?-1:1));
+  // 相性解析：いまの配合と最も多くの成分を共有する未点灯の標本を、研究所が次の一滴として勧める
+  let best=null, bestShared=null;
+  for(const b of BOTS){
+    if(state.active[b.id]) continue;
+    const sh=b.comps.filter(c=>map[c]);
+    if(sh.length && (!best || sh.length>bestShared.length)){ best=b; bestShared=sh; }
+  }
+  const aff=best
+    ? `\n\nAFFINITY → <b>SP.${best.no} ${best.latin.split(" ")[0].toUpperCase()}</b>\n`+
+      `SHARED ${bestShared.join(" · ")}`
+    : "";
+  cindexEl.innerHTML=
+    `<b>COMPOUND INDEX ── ${String(rows.length).padStart(2,"0")}</b>\n`+
+    rows.slice(0,16).map(([c,ns])=>{
+      const inner=ns.length>1
+        ? `<b>${c}</b> ×${ns.length} ─ ${ns.join("·")}`
+        : `${c} ─ ${ns[0]}`;
+      return `<span class="cc" data-c="${c}">${inner}</span>`; // 触れると逆引き
+    }).join("\n")+
+    (rows.length>16?`\n… +${rows.length-16}`:"")+
+    aff;
+}
+/* 成分からの逆引き：成分名に触れると、それを含む標本の軌道環と札が一斉に明滅する */
+let trace={comp:null,bots:[],start:0,until:0};
+function traceCompound(comp){
+  const bots=BOTS.filter(b=>b.comps.includes(comp));
+  if(!bots.length) return;
+  const t0=lastT||performance.now();
+  trace={comp,bots:bots.map(b=>b.id),start:t0,until:t0+2600};
+  addLog(`TRACE ─ ${comp} → ${bots.map(b=>"SP."+b.no).join("·")}`);
+  for(const b of bots){ // 消灯中の標本の所在も、札の明滅で示す
+    const el=document.querySelector(`.spec[data-id="${b.id}"]`);
+    if(el){ el.classList.remove("trace"); void el.offsetWidth; el.classList.add("trace"); }
+  }
+  setTimeout(()=>document.querySelectorAll(".spec.trace")
+    .forEach(e=>e.classList.remove("trace")),2400);
+}
+cindexEl.addEventListener("click",e=>{
+  const cc=e.target.closest(".cc");
+  if(cc) traceCompound(cc.dataset.c);
+});
+
+/* 標本調書：点灯中の標本を約6秒ごとに巡回し、香気成分とノート、純正律の音程を開示する */
+const dossierEl=document.getElementById("dossier");
+let dossierIdx=0;
+function updateDossier(){
+  const act=BOTS.filter(b=>state.active[b.id]);
+  if(!act.length){
+    dossierEl.innerHTML=`<b>SPECIMEN DOSSIER</b>\nSTANDBY ─ NO SPECIMEN UNDER OBSERVATION`;
+    return;
+  }
+  const b=act[dossierIdx%act.length];
+  const octTxt=b.oct===.5?"−1 OCT":b.oct===2?"+1 OCT":"±0 OCT";
+  const noteTxt=b.note==="BASE"?"BASE ─ AFTERNOTE（残香）":b.note==="TOP"?"TOP（立ち香）":"MIDDLE（中盤）";
+  dossierEl.innerHTML=
+    `<b>SPECIMEN DOSSIER ── SP.${b.no}</b>\n`+
+    `${b.latin.toUpperCase()} ─ ${b.jp}\n`+
+    `NOTE      ${noteTxt}\n`+
+    `COMPOUNDS ${b.comps.join(" · ")}\n`+
+    `INTERVAL  ${b.rt} ─ ${b.iv}\n`+
+    `FREQ      ${b.freq.toFixed(1)} Hz（${octTxt}）\n`+
+    `ORBIT     R${b.R} · ${(b.period/1000).toFixed(1)}s · ∠${Math.round(Math.abs(b.incl)*180/Math.PI)}°`;
+}
+setInterval(()=>{ dossierIdx++; updateDossier(); },6000);
+
+/* ============================ 6. 観測（メインループ） ============================ */
+/* 方位テープ：上部中央、カメラの回転を読む度数目盛 */
+function drawTape(t){
+  if(Math.min(innerWidth,innerHeight)<700) return; // 狭い画面では省く
+  const w=Math.min(CW*.44,560*U), cx=CW/2, y=30*U;
+  const az=((camYaw*180/Math.PI)%360+360)%360;
+  ctx.strokeStyle="rgba(205,216,240,.16)"; ctx.lineWidth=1;
+  ctx.beginPath(); ctx.moveTo(cx-w/2,y); ctx.lineTo(cx+w/2,y); ctx.stroke();
+  const ppd=w/60; // 視界60度ぶん
+  ctx.fillStyle="rgba(150,162,195,.4)";
+  ctx.font=`${8*U}px Menlo,monospace`; ctx.textAlign="center";
+  for(let d=Math.ceil(az-30); d<=az+30; d++){
+    if(d%2) continue;
+    const x=cx+(d-az)*ppd;
+    const major=d%10===0;
+    ctx.strokeStyle=`rgba(205,216,240,${major?.28:.13})`;
+    ctx.beginPath(); ctx.moveTo(x,y); ctx.lineTo(x,y-(major?7:3.5)*U); ctx.stroke();
+    if(d%30===0) ctx.fillText(((d%360+360)%360)+"°", x, y+12*U);
+  }
+  ctx.strokeStyle="rgba(233,212,163,.55)"; // 中央の指標
+  ctx.beginPath(); ctx.moveTo(cx,y+2*U); ctx.lineTo(cx,y-9*U); ctx.stroke();
+}
+function composeFrame(t){
+  camUpdate(t);
+  ctx.drawImage(bgC,0,0);
+  ctx.globalCompositeOperation="lighter";
+  for(const s of twink){
+    const a=s.a*.5*(.5+.5*Math.sin(t*.001*s.sp+s.ph));
+    ctx.globalAlpha=a; ctx.fillStyle="#fff";
+    ctx.beginPath(); ctx.arc(s.x,s.y,s.r,0,7); ctx.fill();
+  }
+  ctx.globalAlpha=1; ctx.globalCompositeOperation="source-over";
+  drawObservatory(t);
+  drawComet();
+  drawTape(t);
+}
+let lastT=0, lastDraw=0;
+function tick(t){
+  if(tick._raf) cancelAnimationFrame(tick._raf);
+  tick._raf=requestAnimationFrame(tick);
+  // 省電力ガバナ：通常30fps、無灯の待機時は8fps
+  const idle=Object.keys(rings).length===0 && flashes.length===0 && conjs.length===0 && !comet;
+  if(t-lastDraw < (idle?125:33)-1) return;
+  lastDraw=t;
+  lastT=t;
+  updateComet(t);
+  composeFrame(t);
+}
+resize();
+updateHud();
+updateDossier();
+updateCindex();
+addLog(`LUNAR PHASE ─ ${LUNAR.name} ${Math.round(LUNAR.k*100)}%`);
+if(LUNAR.full) addLog("FULL MOON ─ ALL BELLS BRIGHTENED");
+// URLにレシピがあれば復元する（音は自動再生制限により、最初の操作で満ちる）
+(function(){
+  const m=/[#&]r=([a-z.]+)/.exec(location.hash);
+  if(!m) return;
+  let n=0;
+  for(const id of m[1].split(".")) if(BOT[id]){ toggleBot(BOT[id],true,{quiet:true}); n++; }
+  if(n){ addLog(`RECIPE RESTORED ─ ${String(n).padStart(2,"0")} LAYERS`); hintEl.classList.add("off"); }
+})();
+requestAnimationFrame(tick);
+</script>
+</body>
+</html>
