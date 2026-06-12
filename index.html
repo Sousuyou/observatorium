@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <title>香の天文台 — Observatorium Botanicum</title>
-<meta name="description" content="香の天文台 — ジンのボタニカル26種を音と軌道の層として灯す、純正律の生成アンビエント観測室。宇宙と植物の、交わる場所。">
+<meta name="description" content="香の天文台 — ジンのボタニカル27種を音と軌道の層として灯す、純正律の生成アンビエント観測室。宇宙と植物の、交わる場所。">
 <meta property="og:title" content="香の天文台 — Observatorium Botanicum">
 <meta property="og:description" content="ジンのボタニカルを灯すと、純正律のアンビエントが重なり、渾天儀が巡る。">
 <meta property="og:type" content="website">
@@ -75,6 +75,14 @@
     進行は観測者の手に委ねる──数字キー1〜9で両手バッキングも可能。
     ボタンの表記はいまの基準星でのコードネーム（A·Bm·C♯m…）。
     「律」で移調するとコードネームごと書き換わる
+
+    v2.3「白鍵とニガヨモギ」── C·G·Am·F·Em·Dm·Bm を絶対に：
+    ・既定の基準星をARCTURUS（C3）へ。鍵盤はキー1〜7＝C·Dm·Em·F·G·Am·Bm、
+      8·9·0＝Fm·A♭·Cm の十鍵に
+    ・Bm（シ·レ·ファ♯）のファ♯＝増四度45/32は、この格子に存在しなかった。
+      トライトーン＝中世の「悪魔の音程」。その響きを宿す草として
+      SP.27 ニガヨモギ（Artemisia absinthium・ツヨン）が標本箱に加わる。
+      viiの和音は、アブサンの禁断の薬草が歌うことで初めて成立する
   */
   :root{
     --ink:#e8edf8; --dim:#7d87a6; --hair:rgba(205,216,240,.14);
@@ -497,6 +505,15 @@ const BOTS=[
     deep:[150,60,140], lite:[240,170,235], ratio:5/4, oct:2,
     R:286, incl:-.68, node0:5.7, period:12900, prec:.000019, e:.15, peri:1.1,
     snd:{pad:.01,  bells:{octs:[1,2], every:[3800,7600],  gain:.017}} },
+  /* SP.27 ニガヨモギ：45/32＝トライトーン、中世に「悪魔の音程」と呼ばれた増四度。
+     その響きを宿すのは、アブサンの禁断の薬草をおいて他にない。
+     vii の和音（Bm）は、この草がファ♯を歌うことで初めて成立する */
+  { id:"wormwood", no:"27", latin:"Artemisia absinthium", jp:"ニガヨモギ",
+    note:"MIDDLE", comps:["α-THUJONE","SABINYL ACETATE","MYRCENE"],
+    rt:"45/32", iv:"TRITONE ─ DIABOLUS",
+    deep:[90,140,40],  lite:[200,255,150], ratio:45/32, oct:1,
+    R:274, incl:.38,  node0:2.6, period:16200, prec:-.000019, e:.13, peri:4.6,
+    snd:{pad:.013, trem:[5.4,.0045], bells:{octs:[1,2], every:[5200,9800], gain:.016}} },
 ];
 const BOT={}; BOTS.forEach(b=>{ b.freq=ROOT*b.ratio*b.oct; BOT[b.id]=b; });
 
@@ -670,6 +687,7 @@ function resize(){
   CW=canvas.width=Math.floor(innerWidth*dpr);
   CH=canvas.height=Math.floor(innerHeight*dpr);
   canvas.style.width=innerWidth+"px"; canvas.style.height=innerHeight+"px";
+  if(!CW||!CH) return; // 窓がゼロ寸の間は焼かない（NaN勾配で起動処理を壊さない。可視化時のresizeで焼き直す）
   U=Math.min(CW,CH)/1000;
   SC=Math.min(CW,CH)/980;
   twink=[];
@@ -1549,15 +1567,18 @@ ARCHIVES.forEach(F=>makeSetBtn(F,arWrap));
    ボタンの表記はいまの基準星でのコードネーム。「律」で移調すると書き換わる */
 const NOTES=["A","B♭","B","C","C♯","D","E♭","E","F","F♯","G","A♭"];
 const CHORDS=[
-  { deg:"I",   off:0, min:false, bots:["juniper","orris","nutmeg"],     jp:"主和音 ─ 杜松の骨格" },
-  { deg:"ii",  off:2, min:true,  bots:["coriander","cassia","cardamom"],jp:"二度の短和音 ─ 香辛の影" },
-  { deg:"iii", off:4, min:true,  bots:["orris","cubeb","yuzu"],         jp:"三度の短和音 ─ 導音を抱く" },
-  { deg:"IV",  off:5, min:false, bots:["almond","cardamom","cucumber"], jp:"下属和音 ─ 杏仁と水気" },
-  { deg:"iv",  off:5, min:true,  bots:["yarrow","hinoki","cucumber"],   jp:"短い下属 ─ 翳る薬草園" },
-  { deg:"V",   off:7, min:false, bots:["cubeb","yuzu","coriander"],     jp:"属和音 ─ 帰りたくなる光" },
-  { deg:"vi",  off:9, min:true,  bots:["ginger","juniper","lavender"],  jp:"六度の短和音 ─ 温もりの裏" },
-  { deg:"♭VI", off:8, min:false, bots:["hinoki","juniper","rose"],      jp:"借用和音 ─ 檜と薔薇の異国" },
-  { deg:"i",   off:0, min:true,  bots:["juniper","rose","cubeb"],       jp:"短い主和音 ─ 夜のジン" },
+  // キー1〜7＝定番の白鍵パレット（既定のARCTURUS基準で C·Dm·Em·F·G·Am·Bm）
+  { deg:"I",   off:0,  min:false, bots:["juniper","orris","nutmeg"],     jp:"主和音 ─ 杜松の骨格" },
+  { deg:"ii",  off:2,  min:true,  bots:["coriander","cassia","cardamom"],jp:"二度の短和音 ─ 香辛の影" },
+  { deg:"iii", off:4,  min:true,  bots:["orris","cubeb","yuzu"],         jp:"三度の短和音 ─ 導音を抱く" },
+  { deg:"IV",  off:5,  min:false, bots:["almond","cardamom","cucumber"], jp:"下属和音 ─ 杏仁と水気" },
+  { deg:"V",   off:7,  min:false, bots:["cubeb","yuzu","coriander"],     jp:"属和音 ─ 帰りたくなる光" },
+  { deg:"vi",  off:9,  min:true,  bots:["ginger","juniper","lavender"],  jp:"六度の短和音 ─ 温もりの裏" },
+  { deg:"vii", off:11, min:true,  bots:["wormwood","sansho","yuzu"],     jp:"七度の短和音 ─ ニガヨモギが悪魔の音程を歌う" },
+  // キー8·9·0＝翳りの彩り
+  { deg:"iv",  off:5,  min:true,  bots:["yarrow","hinoki","cucumber"],   jp:"短い下属 ─ 翳る薬草園" },
+  { deg:"♭VI", off:8,  min:false, bots:["hinoki","juniper","rose"],      jp:"借用和音 ─ 檜と薔薇の異国" },
+  { deg:"i",   off:0,  min:true,  bots:["juniper","rose","cubeb"],       jp:"短い主和音 ─ 夜のジン" },
 ];
 let chordPend=[];
 function chordName(C){ return NOTES[(REFS[refIdx].semi+C.off)%12]+(C.min?"m":""); }
@@ -1596,14 +1617,14 @@ CHORDS.forEach((C,idx)=>{
 function updateChordLabels(){ // 律（移調）でコードネームが書き換わる
   CHORDS.forEach((C,i)=>{
     chordEls[i].textContent=chordName(C);
-    chordEls[i].title=`${C.deg} ─ ${C.jp}（${C.bots.map(id=>BOT[id].jp).join("・")}）─ キー${i+1}`;
+    chordEls[i].title=`${C.deg} ─ ${C.jp}（${C.bots.map(id=>BOT[id].jp).join("・")}）─ キー${(i+1)%10}`;
   });
 }
 updateChordLabels();
-addEventListener("keydown",e=>{ // 数字キー1〜9＝コードの鍵盤
+addEventListener("keydown",e=>{ // 数字キー1〜9・0＝コードの鍵盤（1〜7が白鍵の定番）
   if(e.repeat||e.metaKey||e.ctrlKey||e.altKey) return;
-  if(e.key>="1"&&e.key<="9"){
-    const i=+e.key-1;
+  if(e.key>="0"&&e.key<="9"){
+    const i=e.key==="0" ? 9 : +e.key-1;
     if(CHORDS[i]) strikeChord(CHORDS[i],chordEls[i]);
   }
 });
@@ -1955,6 +1976,12 @@ const MOL={
     [-.87,.5,-.87,-.5,1],[-.87,-.5,0,-1,1],[0,-1,0,-2,1],
     [-.87,.5,-1.74,1,1],[-1.74,1,-1.74,2,1],[-1.74,1,-2.61,.5,1],
     [-2.61,.5,-3.48,1,1],[-3.48,1,-4.35,.5,2],[-4.35,.5,-5.22,1,1],[-4.35,.5,-4.35,-.5,1]]},
+  "α-THUJONE":{ f:"C10H16O", a:[[1.9,-.62,"O"]], b:[ // 禁断の薬草の核：ツヨンのケトン
+    [0,-1,.95,-.31,1],[.95,-.31,.59,.81,1],[.59,.81,-.59,.81,1],
+    [-.59,.81,-.95,-.31,1],[-.95,-.31,0,-1,1],
+    [-.59,.81,-1.7,.25,1],[-.95,-.31,-1.7,.25,1],
+    [.95,-.31,1.9,-.62,2],[0,-1,0,-2,1],
+    [-1.7,.25,-2.55,.6,1],[-2.55,.6,-3.4,.1,1],[-2.55,.6,-2.55,1.6,1]]},
   "PERILLALDEHYDE":{ f:"C10H14O", a:[[.87,-2.5,"O"]], b:[ // 紫蘇の立ち香
     [0,-1,.87,-.5,2],[.87,-.5,.87,.5,1],[.87,.5,0,1,1],[0,1,-.87,.5,1],
     [-.87,.5,-.87,-.5,1],[-.87,-.5,0,-1,1],
@@ -1986,7 +2013,8 @@ const SIG={ juniper:"α-PINENE", coriander:"LINALOOL", angelica:"PENTADECANOLIDE
   yuzu:"LIMONENE", sansho:"α-SANSHOOL", nutmeg:"MYRISTICIN",
   almond:"BENZALDEHYDE", caraway:"CARVONE", elder:"HOTRIENOL", rose:"GERANIOL",
   cucumber:"(2E,6Z)-NONADIENAL", yarrow:"CHAMAZULENE", hinoki:"α-CADINOL",
-  gyokuro:"(Z)-3-HEXENOL", ginger:"ZINGIBERENE", shiso:"PERILLALDEHYDE" };
+  gyokuro:"(Z)-3-HEXENOL", ginger:"ZINGIBERENE", shiso:"PERILLALDEHYDE",
+  wormwood:"α-THUJONE" };
 /* 構造式をヘアラインのSVGに起こす（二重結合は平行線、原子は金のラベル） */
 function molSvg(comp){
   const M=MOL[comp];
@@ -2085,6 +2113,7 @@ function drawTape(t){
   ctx.beginPath(); ctx.moveTo(cx,y+2*U); ctx.lineTo(cx,y-9*U); ctx.stroke();
 }
 function composeFrame(t){
+  if(!CW||!CH) return; // 窓がゼロ寸の間（非表示等）は描かない＝起動処理を巻き込まない
   camUpdate(t);
   ctx.drawImage(bgC,0,0);
   ctx.globalCompositeOperation="lighter";
@@ -2130,6 +2159,7 @@ function tick(t){
 }
 resize();
 setTimeout(measureBench,600); // フォント読込後の折返し変化に追従
+setRoot(3); // 既定の基準星はARCTURUS（C3）─ コードの鍵盤が C·Dm·Em·F·G·Am·Bm で並ぶ
 updateHud();
 updateDossier();
 updateCindex();
