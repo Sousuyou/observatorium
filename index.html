@@ -103,6 +103,16 @@
     ・スマホ ─ 標本をスクロール棚から「一望できるチップの庭」へ（学名/Hzは
       調書に任せて非表示）。印は6つ・32pxに、副題は狭い画面では省く
     ・雨の印 ─ 右上のツール列に「雨」を追加（SP.00の札と同期）
+
+    v2.7「整列と運動の連続性」── 既存の語彙を画面全体へ磨き広げる：
+    ・モバイルの計器衝突を解消 ─ cindexの縦伸長を計器占有高に連動させ上限化、
+      狭画面では上位8件に要約・AFFINITYを省く。--benchHのフォールバックを
+      実態(300px)へ、ResizeObserverで回転・折返しの追従漏れを塞ぐ
+    ・運動を実時間駆動へ ─ 環の伸縮をフレーム依存(誤って約2.6秒)から
+      frameDt駆動の正しい1.3秒に。蒸留核の膨張をローパス追従で滑らかに、
+      呼吸する画角を僅かに抑える(.025→.018)。彗星の尾と雨脈に丸端と無理数位相
+    ・計器を「表」に ─ 調書の桁揃えの流儀をHUDへ。音程・周波数の数列が縦に整う
+    ・「弾ける鍵盤」の宣言 ─ CHORD鍵に数字キーの微小刻印、打鍵に専用の一閃
   */
   :root{
     --ink:#e8edf8; --dim:#7d87a6; --hair:rgba(205,216,240,.14);
@@ -188,6 +198,12 @@
     font-family:var(--mono); font-size:8.5px; letter-spacing:.14em;
     color:rgba(150,162,195,.66); line-height:2.05; white-space:pre; text-align:right;
     pointer-events:auto; border-right:1px solid var(--hair); padding-right:12px;
+    /* 成分索引は配合が濃いほど伸びる（ARCHIVE等）。底から立つ標本リスト(hud-br)の
+       実高(--hudRh)を予約して上限化し、下辺は霧のように溶かす（…+Nで残数を示す）。
+       配合が軽い時は標本リストが短い＝索引が伸び、AFFINITYまで開ける */
+    max-height:calc(100vh - 142px - var(--benchH,210px) - var(--hudRh,200px) - 70px); overflow:hidden;
+    -webkit-mask-image:linear-gradient(180deg,#000 86%,transparent);
+    mask-image:linear-gradient(180deg,#000 86%,transparent);
   }
   .cindex b{ color:rgba(233,212,163,.85); font-weight:400; }
   .cindex .cc{ cursor:pointer; transition:color .2s; } /* 成分名に触れると逆引き */
@@ -219,7 +235,17 @@
     text-transform:uppercase; white-space:nowrap;
     backdrop-filter:blur(6px); -webkit-backdrop-filter:blur(6px);
   }
-  .formula.cad{ text-transform:none; min-width:34px; } /* コードネームの大小文字（Am等）を保つ */
+  .formula.cad{ text-transform:none; min-width:34px; position:relative; } /* コードネームの大小文字（Am等）を保つ */
+  .formula.cad[data-key]::after{ /* 数字キーの微小刻印＝「弾ける鍵盤」の静かな宣言 */
+    content:attr(data-key); position:absolute; top:1px; right:3px;
+    font-size:5.5px; letter-spacing:0; color:rgba(150,162,195,.42);
+  }
+  .formula.cad.struck{ animation:strikeGlow .42s ease-out; } /* 打鍵の一閃（持続点灯.onとは別） */
+  @keyframes strikeGlow{
+    0%{ box-shadow:0 0 0 rgba(233,212,163,0); }
+    28%{ box-shadow:0 0 14px rgba(233,212,163,.5); border-color:rgba(233,212,163,.8); }
+    100%{ box-shadow:0 0 0 rgba(233,212,163,0); }
+  }
   .formula.voice{ color:var(--gold); } /* 音色の持ち替えは金の印 */
   .formula:hover{ border-color:rgba(233,212,163,.5); color:#e9dfc2; }
   .formula.on{ border-color:rgba(233,212,163,.75); color:var(--gold); background:rgba(233,212,163,.08); }
@@ -281,7 +307,7 @@
     .tools{ gap:5px; }
     .tools button{ width:32px; height:32px; font-size:11px; }
     .motto{ display:none; }
-    .hud-bl{ bottom:calc(var(--benchH,140px) + 34px); font-size:8.5px; }
+    .hud-bl{ bottom:calc(var(--benchH,300px) + 34px); font-size:8.5px; }
     .hud-br{ display:none; } /* 狭い画面では計器を方位のみに */
     .log{ display:none; }
     .dossier{ display:none; }
@@ -289,9 +315,14 @@
       left:16px; right:auto; top:118px; text-align:left;
       border-right:none; border-left:1px solid var(--hair);
       padding:0 0 0 10px; font-size:8.5px; line-height:2;
-      max-height:32vh; overflow:hidden;
+      /* 計器の占有高に連動した上限＝底から立つHUDの帯へ侵入する前に…+Nへ省略する
+         （予備175px＝雨ONで7行に増えたHUDの最大高＋間隙を見込む） */
+      max-height:calc(100vh - 118px - var(--benchH,300px) - 175px); overflow:hidden;
+      /* クリップ端を硬く切らず、下辺を霧のように溶かす */
+      -webkit-mask-image:linear-gradient(180deg,#000 78%,transparent);
+      mask-image:linear-gradient(180deg,#000 78%,transparent);
     }
-    .hint{ bottom:calc(var(--benchH,140px) + 76px); font-size:10.5px; letter-spacing:.22em; width:92vw; }
+    .hint{ bottom:calc(var(--benchH,300px) + 76px); font-size:10.5px; letter-spacing:.22em; width:92vw; }
     .bench{ width:100vw; gap:7px; }
     .formulary{ /* 処方箋・銘酒も横にすべる棚に */
       width:100%; overflow-x:auto; justify-content:flex-start;
@@ -581,7 +612,7 @@ let cyc=1,syc=0,cpc=1,spc=0;
 function camUpdate(t){
   camYaw=t*.000062;
   camPitch=.34+.1*Math.sin(t*.000165);
-  ZK=1+.025*Math.sin(t*.000087); // ごく遅い寄り引き（呼吸する画角）
+  ZK=1+.018*Math.sin(t*.000087); // ごく遅い寄り引き（呼吸する画角・照準環が泳がぬよう控えめに）
   cyc=Math.cos(camYaw); syc=Math.sin(camYaw);
   cpc=Math.cos(camPitch); spc=Math.sin(camPitch);
 }
@@ -725,6 +756,8 @@ const rings={};   // id -> {bot,k(0..1),dir,particles:[...]}
 const flashes=[]; // 鈴と同期する閃光 {bot,phase,born}
 const conjs=[], conjCool={}; // 合：主星同士の出会い
 let lastBellT=-1e9;          // 鈴が鳴るたび蒸留核が微かに明滅する
+let coreLevel=0;             // 蒸留核の膨張をローパス追従（層の増減でカクつかせない）
+let frameDt=33;              // 直近フレームの実経過ms（環の伸縮を実時間で駆動）
 
 /* 彗星：観測中、ごくまれに視野を横切る訪問者（観測記録に残る） */
 let comet=null, nextCometAt=30000;
@@ -753,6 +786,7 @@ function drawComet(){
   if(!comet||comet.trail.length<2) return;
   const tr=comet.trail;
   ctx.globalCompositeOperation="lighter";
+  ctx.lineCap="round"; ctx.lineJoin="round"; // 淡い尾の節を丸め、主星の尾と作法を揃える
   for(let i=1;i<tr.length;i++){
     const q1=project(tr[i-1]), q2=project(tr[i]);
     ctx.strokeStyle=rgba([200,220,255],.5*i/tr.length);
@@ -835,14 +869,15 @@ function drawCage(t){
 function drawObservatory(t){
   ctx.globalCompositeOperation="lighter";
   const activeN=Object.values(rings).filter(r=>r.dir>0).length;
+  coreLevel+=(Math.min(5,activeN)-coreLevel)*0.08; // 核の膨張を滑らかに追従（段を踏ませない）
   drawCage(t);
   // 蒸留核：鈴が鳴るたび、微かに明滅する
   {
     const q=project({x:0,y:0,z:0});
     const breath=1+.05*Math.sin(t*.00074);
     const flick=Math.max(0,.16*Math.exp(-(t-lastBellT)/260));
-    const size=(170+36*Math.min(5,activeN))*SC*q.s*breath;
-    ctx.globalAlpha=clamp(.3+.1*Math.min(4,activeN)+flick,0,1);
+    const size=(170+36*coreLevel)*SC*q.s*breath;
+    ctx.globalAlpha=clamp(.3+.1*Math.min(4,coreLevel)+flick,0,1);
     ctx.drawImage(coreC,q.x-size/2,q.y-size/2,size,size);
     ctx.globalAlpha=1;
     // 蒸留冠：層が三つ以上灯ると、核のまわりに逆回りの光弧が立ちのぼる
@@ -860,7 +895,7 @@ function drawObservatory(t){
   const prims=[]; // 各環の主星（合の判定に使う）
   for(const id in rings){
     const Rg=rings[id], bot=Rg.bot;
-    Rg.k+=Rg.dir*(16/1300); // 約1.3秒で出入り（tick30fps基準）
+    Rg.k+=Rg.dir*(frameDt/1300); // 実時間で約1.3秒の出入り（間引き・タブ復帰を跨いでも一定の所作）
     if(Rg.k<=0){ delete rings[id]; continue; }
     Rg.k=clamp(Rg.k,0,1);
     const k=ease(Rg.k);
@@ -1658,7 +1693,10 @@ function strikeChord(C,el){
     i++;
   }
   addLog(`CHORD ─ ${chordName(C)}（${C.deg}）`);
-  if(el){ el.classList.add("on"); setTimeout(()=>el.classList.remove("on"),500); }
+  if(el){ // 打鍵の一閃（持続点灯ではなく、ピアノの減衰と歩調を合わせた閃光）
+    el.classList.remove("struck"); void el.offsetWidth; el.classList.add("struck");
+    el.addEventListener("animationend",()=>el.classList.remove("struck"),{once:true});
+  }
 }
 const chWrap=document.getElementById("chords");
 /* ♪：観測者の楽器を持ち替える（クリックまたはVキー） */
@@ -1681,6 +1719,7 @@ const chordEls=[];
 CHORDS.forEach((C,idx)=>{
   const el=document.createElement("button");
   el.className="formula cad";
+  el.dataset.key=String((idx+1)%10); // 数字キーの刻印（1〜9, 0）。strikeChord呼出順と一致
   el.textContent=chordName(C);
   el.addEventListener("click",()=>strikeChord(C,el));
   chWrap.appendChild(el); chordEls.push(el);
@@ -1878,20 +1917,25 @@ const hudL=document.getElementById("hudL"), hudR=document.getElementById("hudR")
 function updateHud(){
   const act=BOTS.filter(b=>state.active[b.id]);
   const az=((camYaw*180/Math.PI)%360+360)%360;
+  // 計器の桁揃え：手早く読む三つの計（方位・本数・緊張）はラベルを8桁に均し値を縦に立てる
   hudL.innerHTML=
-    `AZIMUTH <b>${az.toFixed(1).padStart(5,"0")}°</b>\n`+
-    `ESSENCES <b>${String(act.length).padStart(2,"0")}</b> / ${BOTS.length}\n`+
+    `${"AZIMUTH".padEnd(8)} <b>${az.toFixed(1).padStart(5,"0")}°</b>\n`+
+    `${"ESSENCES".padEnd(8)} <b>${String(act.length).padStart(2,"0")}</b> / ${BOTS.length}\n`+
     `ROOT ${REFS[refIdx].note} <b>${ROOT.toFixed(1)} Hz</b> ─ ${REFS[refIdx].star} ─ 5-LIMIT JUST INTONATION\n`+
     `TIMBRE HARMONIC SERIES <b>1·2·3·4·5</b>\n`+
-    `HARMONY <b>${String(HARM.pct).padStart(2,"0")}%</b> ─ ${HARM.label}\n`+
+    `${"HARMONY".padEnd(8)} <b>${String(HARM.pct).padStart(2,"0")}%</b> ─ ${HARM.label}\n`+
     `LUNAR ${LUNAR.name} <b>${Math.round(LUNAR.k*100)}%</b>`+
     (LUNAR.full?" ─ BELLS BRIGHTENED":"")+
     (rain.on?`\nWEATHER <b>RAIN</b> ─ PETRICHOR RISING`:"");
   const shown=act.slice(0,10);
+  // 標本の一覧も表に：音程と周波数を右の列へ立て桁を揃える（hud-brは右寄せ＝右の数列が縦に整う）
   hudR.innerHTML=act.length
-    ? shown.map(b=>`SP.${b.no} ${b.latin.split(" ")[0].toUpperCase()} ${b.rt} <b>${b.freq.toFixed(1)}Hz</b> ${b.note[0]}`).join("\n")
+    ? shown.map(b=>`SP.${b.no} ${b.latin.split(" ")[0].toUpperCase()} ${b.rt.padStart(5)} <b>${b.freq.toFixed(1).padStart(6)}Hz</b> ${b.note[0]}`).join("\n")
       +(act.length>10?`\n… +${act.length-10}`:"")
     : `STANDBY ─ AWAITING SPECIMEN`;
+  // 標本リストの実高をCSSへ。成分索引がこの帯を避けて上限を決める（毎フレーム負荷なし）
+  const hudRlines=act.length ? Math.min(act.length,10)+(act.length>10?1:0) : 1;
+  document.documentElement.style.setProperty("--hudRh",(hudRlines*18+6)+"px");
 }
 setInterval(updateHud,700);
 
@@ -1913,19 +1957,21 @@ function updateCindex(){
     const sh=b.comps.filter(c=>map[c]);
     if(sh.length && (!best || sh.length>bestShared.length)){ best=b; bestShared=sh; }
   }
-  const aff=best
+  // 狭い画面では計器の占有高を抑えるため上位8件に要約（共有成分は降順＝最も濃い香りの糸が残る）
+  const cap = innerWidth<=760 ? 8 : 16;
+  const aff=(best && innerWidth>760)
     ? `\n\nAFFINITY → <b>SP.${best.no} ${best.latin.split(" ")[0].toUpperCase()}</b>\n`+
       `SHARED ${bestShared.join(" · ")}`
     : "";
   cindexEl.innerHTML=
     `<b>COMPOUND INDEX ── ${String(rows.length).padStart(2,"0")}</b>\n`+
-    rows.slice(0,16).map(([c,ns])=>{
+    rows.slice(0,cap).map(([c,ns])=>{
       const inner=ns.length>1
         ? `<b>${c}</b> ×${ns.length} ─ ${ns.join("·")}`
         : `${c} ─ ${ns[0]}`;
       return `<span class="cc" data-c="${c}">${inner}</span>`; // 触れると逆引き
     }).join("\n")+
-    (rows.length>16?`\n… +${rows.length-16}`:"")+
+    (rows.length>cap?`\n… +${rows.length-cap}`:"")+
     aff;
 }
 /* 成分からの逆引き：成分名に触れると、それを含む標本の軌道環と札が一斉に明滅する */
@@ -2230,13 +2276,16 @@ function drawRain(t){
   if(!rain.on) return;
   ctx.fillStyle="rgba(6,8,14,.06)"; ctx.fillRect(0,0,CW,CH); // 雲の薄衣
   ctx.globalCompositeOperation="lighter";
-  for(let i=0;i<14;i++){
-    const seed=i*137.508;
-    const x=((seed*.733)%1)*CW;
-    const len=(.05+((i*13)%7)/7*.05)*CH;
-    const speed=.00009+.00004*((i*7)%5)/4;
-    const y=(((t*speed)+(seed%1))%1)*(CH+len)-len;
-    ctx.strokeStyle=`rgba(180,200,235,${.05+.04*Math.abs(Math.sin(i*2.4))})`;
+  ctx.lineCap="round";
+  const N=Math.min(26,(CW/90)|0); // 雨脚の本数は画面幅に連動（モバイルは自然に少なく）
+  for(let i=0;i<N;i++){
+    // 黄金比など無理数で位相を散らし、低周期剰余の縞（斜めの繰り返し）を崩す
+    const ph=(i*0.6180339887)%1;
+    const x=((i*0.4142135624)%1)*CW;
+    const len=(.05+ph*.05)*CH;
+    const speed=.00009+.00005*((i*0.2718281828)%1);
+    const y=(((t*speed)+ph)%1)*(CH+len)-len;
+    ctx.strokeStyle=`rgba(180,200,235,${.05+.045*((i*0.7548776662)%1)})`;
     ctx.lineWidth=.7*U;
     ctx.beginPath(); ctx.moveTo(x,y); ctx.lineTo(x+CW*.004,y+len); ctx.stroke();
   }
@@ -2249,6 +2298,7 @@ function tick(t){
   // 省電力ガバナ：通常30fps、無灯の待機時は8fps
   const idle=Object.keys(rings).length===0 && flashes.length===0 && conjs.length===0 && !comet;
   if(t-lastDraw < (idle?125:33)-1) return;
+  frameDt=Math.min(t-lastDraw,40); // 実時間駆動の運動へ（40msで頭打ち＝復帰時の飛び防止）
   lastDraw=t;
   lastT=t;
   updateComet(t);
@@ -2256,6 +2306,10 @@ function tick(t){
 }
 resize();
 setTimeout(measureBench,600); // フォント読込後の折返し変化に追従
+if(window.ResizeObserver){ // 回転・折返しでも調合台の高さ追従が外れぬよう監視（イベント駆動＝省電力）
+  const _bench=document.querySelector(".bench");
+  if(_bench) new ResizeObserver(()=>measureBench()).observe(_bench);
+}
 setRoot(3); // 既定の基準星はARCTURUS（C3）─ コードの鍵盤が C·Dm·Em·F·G·Am·Bm で並ぶ
 updateHud();
 updateDossier();
